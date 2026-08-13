@@ -1,3 +1,4 @@
+// 功能概括
 // 单个函数行 - 颜色块 + 表达式输入框 + 删除按钮 + 导数/切线/追踪控制
 import { useState } from "react";
 import { 可选颜色 } from "../../utils/colors";
@@ -5,12 +6,12 @@ import { 解析表达式 } from "../../math/parse";
 import { 求导数值, 找区间内临界点 } from "../../math/derivative";
 import { 检查表达式 } from "../../math/validate"
 
-// 停在临界点后，要拖出这么远才放开（数学单位）
+// 停在临界点后，需要要拖出这么远才放开（数学单位）
 const 逃逸距离 = 0.35;
 
 function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   const [调色盘展开, 设置调色盘展开] = useState(false);
-
+  //解析式保护，防止崩溃
   // 解析表达式，可能因为半截输入而抛错，包一层防止整个组件崩掉
   let 解析结果 = null;
   try {
@@ -20,6 +21,7 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   }
 
   const 可用 = Boolean(解析结果 && 解析结果.成功);
+  //错误提示功能
   // 错误提示：先给自制错误检查，无法识别后，再给通用纠错
   const 自查错误 = 检查表达式(项.表达式);
   const 错误提示 = 自查错误 || (项.表达式 && !可用 ? "这个算式解析不了，检查一下写法" : null);
@@ -39,7 +41,7 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   }
 
   const 是临界点 = Number.isFinite(当前斜率) && Math.abs(当前斜率) < 0.001;
-
+  // 导数关键点粘连停止功能，防止错过关键信息
   // 滑块拖动：先看是否该「粘住」，再看这一步有没有跨过临界点
   function 处理切点变化(新值) {
     if (!Number.isFinite(新值)) return;
