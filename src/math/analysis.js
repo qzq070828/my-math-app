@@ -216,3 +216,85 @@ export function 可以连接(点A, 点B, 像素差, 画布高, 计算函数 = nu
   // 连续（只是陡）和单侧无定义（定义域端点）该连；跳跃/无穷/振荡都断
   return 结果.类型 === "连续" || 结果.类型 === "单侧无定义";
 }
+
+// ============ 断点扫描：渲染前先切分定义域 ============
+
+function 安全求值(计算函数, x) {
+  try {
+    const y = 计算函数(x);
+    return Number.isFinite(y) ? y : NaN;
+  } catch {
+    return NaN;
+  }
+}
+
+// 收缩测试：这段里的大落差是真断点，还是只是很陡？
+// 每次二分保留落差大的那一半。光滑函数区间缩小、落差跟着缩；
+// 真断点的落差纹丝不动。
+function 收缩是断点(计算函数, 左x, 右x) {
+  let a = 左x;
+  let b = 右x;
+  let fa = 安全求值(计算函数, a);
+  let fb = 安全求值(计算函数, b);
+  if (!Number.isFinite(fa) || !Number.isFinite(fb)) return true;
+
+  const 初始落差 = Math.abs(fb - fa);
+  if (初始落差 === 0) return false;
+
+  for (let i = 0; i < 12; i++) {
+    const m = (a + b) / 2;
+    const fm = 安全求值(计算函数, m);
+    if (!Number.isFinite(fm)) return true;
+
+    if (Math.abs(fm - fa) >= Math.abs(fb - fm)) {
+      b = m;
+      fb = fm;
+    } else {
+      a = m;
+      fa = fm;
+    }
+
+    // 落差跟着区间一起缩 → 只是陡，不是断点
+    if (i >= 3 && Math.abs(fb - fa) < 初始落差 * 0.1) return false;
+  }
+
+  return Math.abs(fb - fa) > 初始落差 * 0.4;
+}
+
+// 扫描一段 x 范围内的所有断点，返回排好序的位置列表
+// 渲染前调用：切开之后每一段内部都连续，画线时不用再判断断不断
+export function 扫描断点(计算函数, 左x, 右x, 视图范围, 画布宽, 画布高) {
+  const 断点 = [];
+  const 采样数 = Math.max(400, Math.min(3000, Math.round(画布宽)));
+  const 步长 = (右x - 左x) / 采样数;
+  const 每单位像素y = 画布高 / (视图范围.y最大 - 视图范围.y最小);
+
+  // 一列跳过半个画布才值得追查，避免在陡峭函数上做无谓检测
+  const 候选门槛 = 画布高 * 0.5;
+
+  let 上x = 左x;
+  let 上y = 安全求值(计算函数, 上x);
+
+  for (let i = 1; i <= 采样数; i++) {
+    const 当前x = 左x + i * 步长;
+    const 当前y = 安全求值(计算函数, 当前x);
+
+    const 上无效 = !Number.isFinite(上y);
+    const 今无效 = !Number.isFinite(当前y);
+
+    if (上无效 !== 今无效) {
+      // 定义域边界，或者直接算出了 Infinity
+      断点.push(定位跳变点(计算函数, 上x, 当前x));
+    } else if (!上无效 && !今无效) {
+      const 像素差 = Math.abs(当前y - 上y) * 每单位像素y;
+      if (像素差 > 候选门槛 && 收缩是断点(计算函数, 上x, 当前x)) {
+        断点.push(定位跳变点(计算函数, 上x, 当前x));
+      }
+    }
+
+    上x = 当前x;
+    上y = 当前y;
+  }
+
+  return 断点;
+}

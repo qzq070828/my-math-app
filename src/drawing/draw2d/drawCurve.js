@@ -1,108 +1,14 @@
-// 画曲线 - 把一串数学点连成曲线画在画布上
+// 画曲线 - 纯渲染，零决策
 //
-// 细分判据 = 中点偏离弦多远。两条触底规则：
-//   两端都可见的段 → 细到 0.1px 为止（高震荡函数在这个尺度上
-//   画出的锯齿就是均匀的实心带，正是远视野下该有的样子）
-//   有一端出画布的段 → 不设像素下限，一路追到深度上限
-//   （tan 冲向无穷时要追到画布边缘；固定像素下限会把
-//   每支的高度卡在半空 —— 就是之前尖刺高低不齐的原因）
+// 所有数学判断都在 src/math/sampler/ 里做完了，这里只有两件事：
+//   笔画[] → 折线
+//   包络带[] → 纵向填充
+// 之前所有反复的根源都是渲染层里藏着判断，这层从此没有资格出错。
 import { 数学转像素 } from "../../utils/mathToScreen";
-import { 可以连接 } from "../../math/analysis";
+import { 采样曲线 } from "../../math/sampler";
 
-const 弯曲门槛 = 2; // 中点偏离弦超过这么多像素就细分
-const 平滑门槛 = 10; // 两端 y 差在这以内且中点贴弦，直接连
-const 最大深度 = 16; // 递归上限：0.5px 基础段砍 16 次已是纳米级
-const 平缓区最小宽 = 0.1; // 两端都可见时的细分下限（像素）
-const 黄金比 = 0.381966; // 反共振探测点：无理位置，躲开整数比对齐
-
-function 在画布内(像素y, 画布高) {
-  return 像素y >= 0 && 像素y <= 画布高;
-}
-
-function 细分(计算函数, 点A, 点B, 深度, 结果, 环境) {
-  const { 画布宽, 画布高, 视图范围 } = 环境;
-
-  const 像素A = 数学转像素(点A.x, 点A.y, 画布宽, 画布高, 视图范围);
-  const 像素B = 数学转像素(点B.x, 点B.y, 画布宽, 画布高, 视图范围);
-
-  // 两端都在画布外的同一侧：中间那段看不见，连了也画在画布外，无害
-  // 这是 tan 每支追出边缘后递归的终点
-  if (
-    (像素A.像素y < 0 && 像素B.像素y < 0) ||
-    (像素A.像素y > 画布高 && 像素B.像素y > 画布高)
-  ) {
-    结果.push({ x: 点B.x, y: 点B.y, 连: true });
-    return;
-  }
-
-  // 触底判断：出界的段不受像素宽限制，只受深度上限
-  const 像素宽 = Math.abs(像素B.像素x - 像素A.像素x);
-  const 双端可见 =
-    在画布内(像素A.像素y, 画布高) && 在画布内(像素B.像素y, 画布高);
-  const 触底 =
-    深度 >= 最大深度 || (双端可见 && 像素宽 < 平缓区最小宽);
-
-  if (触底) {
-    // 细到底了还在跳 → 这才动用极限分类问「是不是真断点」
-    const 像素差 = Math.abs(像素B.像素y - 像素A.像素y);
-    结果.push({
-      x: 点B.x,
-      y: 点B.y,
-      连:
-        像素差 <= 平滑门槛
-          ? true
-          : 可以连接(点A, 点B, 像素差, 画布高, 计算函数),
-    });
-    return;
-  }
-
-  const 中x = (点A.x + 点B.x) / 2;
-  let 中y;
-  try {
-    中y = 计算函数(中x);
-  } catch {
-    中y = NaN;
-  }
-
-  // 中间无定义：断在这里
-  if (!Number.isFinite(中y)) {
-    结果.push({ x: 点B.x, y: 点B.y, 连: false });
-    return;
-  }
-
-  const 像素中 = 数学转像素(中x, 中y, 画布宽, 画布高, 视图范围);
-
-  // 平坦测试：中点离「A→B 直线」有多远
-  const 弦中y = (像素A.像素y + 像素B.像素y) / 2;
-  const 偏离 = Math.abs(像素中.像素y - 弦中y);
-
-  if (偏离 <= 弯曲门槛 && Math.abs(像素B.像素y - 像素A.像素y) <= 平滑门槛) {
-    // 反共振复检：周期恰好等于半段宽时，中点会和两端同相、假装很平。
-    // 在 0.382 这个无理位置再探一次；只有中点说平才花这一次求值
-    const 探x = 点A.x + (点B.x - 点A.x) * 黄金比;
-    let 探y;
-    try {
-      探y = 计算函数(探x);
-    } catch {
-      探y = NaN;
-    }
-
-    if (Number.isFinite(探y)) {
-      const 像素探 = 数学转像素(探x, 探y, 画布宽, 画布高, 视图范围);
-      const 弦探y =
-        像素A.像素y + (像素B.像素y - 像素A.像素y) * 黄金比;
-      if (Math.abs(像素探.像素y - 弦探y) <= 弯曲门槛) {
-        结果.push({ x: 点B.x, y: 点B.y, 连: true });
-        return;
-      }
-    }
-    // 探出问题（不平或无定义）→ 掉下去继续细分
-  }
-
-  const 中点 = { x: 中x, y: 中y };
-  细分(计算函数, 点A, 中点, 深度 + 1, 结果, 环境);
-  细分(计算函数, 中点, 点B, 深度 + 1, 结果, 环境);
-}
+const 近轴距离 = 3; // 离轴多少像素内算「贴着」
+const 平坦跨度 = 6; // 段跨度小于这个才算「沿着轴走」，排除穿过轴的情况
 
 export function 画曲线(
   ctx,
@@ -113,51 +19,116 @@ export function 画曲线(
   颜色 = "#2563eb",
   计算函数 = null
 ) {
+  // 没给函数就退回老办法：直接连采样点
+  if (!计算函数 || !点数组 || !点数组.length) {
+    ctx.strokeStyle = 颜色;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let 上一个有效 = false;
+    for (const 点 of 点数组 || []) {
+      if (!Number.isFinite(点.y)) {
+        上一个有效 = false;
+        continue;
+      }
+      const 像素 = 数学转像素(点.x, 点.y, 画布宽, 画布高, 视图范围);
+      if (上一个有效) ctx.lineTo(像素.像素x, 像素.像素y);
+      else ctx.moveTo(像素.像素x, 像素.像素y);
+      上一个有效 = true;
+    }
+    ctx.stroke();
+    return;
+  }
+
+  // 画哪一段 x：从点数组首尾取，这样「追踪函数」传部分点时也对
+  const 起点x = 点数组[0].x;
+  const 终点x = 点数组[点数组.length - 1].x;
+  if (!(终点x > 起点x)) return;
+
+  const { 笔画, 包络带 } = 采样曲线(
+    计算函数,
+    起点x,
+    终点x,
+    视图范围,
+    画布宽,
+    画布高
+  );
+
+  const x转 = (x) => 数学转像素(x, 0, 画布宽, 画布高, 视图范围).像素x;
+  const y转 = (y) => 数学转像素(起点x, y, 画布宽, 画布高, 视图范围).像素y;
+  const 夹 = (py) => Math.max(-8, Math.min(画布高 + 8, py));
+
+  // —— 包络带：纵向填充 ——
+  if (包络带.length) {
+    ctx.save();
+    ctx.fillStyle = 颜色;
+    for (const 带 of 包络带) {
+      const 左px = x转(带.左x);
+      const 宽 = Math.max(1, x转(带.右x) - 左px);
+      let 顶;
+      let 底;
+      if (带.满高) {
+        顶 = -2;
+        底 = 画布高 + 2;
+      } else {
+        顶 = 夹(y转(带.最大));
+        底 = 夹(y转(带.最小));
+        if (底 - 顶 < 2) {
+          const 中 = (顶 + 底) / 2; // 太薄的带补到 2 像素，别画没
+          顶 = 中 - 1;
+          底 = 中 + 1;
+        }
+      }
+      ctx.fillRect(左px, 顶, 宽, 底 - 顶);
+    }
+    ctx.restore();
+  }
+
+  if (!笔画.length) return;
+
+  // —— 笔画：先算像素坐标 ——
+  const 像素笔画 = 笔画.map((条) =>
+    条.map((p) => ({ px: x转(p.x), py: 夹(y转(p.y)) }))
+  );
+
+  // —— 贴轴的段垫白边：曲线和坐标轴挤在同一批像素时能分开 ——
+  // 「跨度小」把「穿过轴」排除掉：sin(x) 过零点时是斜的，跨度大
+  const x轴py = y转(0);
+  const y轴px = x转(0);
+  let 有贴轴 = false;
+
+  ctx.save();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  for (const 条 of 像素笔画) {
+    for (let i = 1; i < 条.length; i++) {
+      const a = 条[i - 1];
+      const b = 条[i];
+      const 跨 = Math.abs(b.py - a.py);
+      const 贴x轴 =
+        跨 < 平坦跨度 &&
+        Math.min(Math.abs(a.py - x轴py), Math.abs(b.py - x轴py)) < 近轴距离;
+      const 贴y轴 =
+        跨 >= 平坦跨度 &&
+        Math.min(Math.abs(a.px - y轴px), Math.abs(b.px - y轴px)) < 近轴距离;
+      if (贴x轴 || 贴y轴) {
+        有贴轴 = true;
+        ctx.moveTo(a.px, a.py);
+        ctx.lineTo(b.px, b.py);
+      }
+    }
+  }
+  if (有贴轴) ctx.stroke();
+  ctx.restore();
+
+  // —— 正式描线 ——
   ctx.strokeStyle = 颜色;
   ctx.lineWidth = 2;
   ctx.beginPath();
-
-  const 环境 = { 画布宽, 画布高, 视图范围 };
-
-  // 先算出「画哪些点、哪里断笔」，再统一画
-  const 结果 = [];
-  let 上一个有效点 = null;
-
-  for (const 点 of 点数组) {
-    if (!Number.isFinite(点.y)) {
-      上一个有效点 = null; // 断了，下一个有效点重新起笔
-      continue;
-    }
-
-    if (!上一个有效点) {
-      结果.push({ x: 点.x, y: 点.y, 连: false });
-    } else if (计算函数) {
-      细分(计算函数, 上一个有效点, 点, 0, 结果, 环境);
-    } else {
-      // 没给函数就补不了点，退回粗略判断
-      const 像素A = 数学转像素(
-        上一个有效点.x,
-        上一个有效点.y,
-        画布宽,
-        画布高,
-        视图范围
-      );
-      const 像素B = 数学转像素(点.x, 点.y, 画布宽, 画布高, 视图范围);
-      结果.push({
-        x: 点.x,
-        y: 点.y,
-        连: Math.abs(像素B.像素y - 像素A.像素y) <= 画布高,
-      });
-    }
-
-    上一个有效点 = 点;
+  for (const 条 of 像素笔画) {
+    ctx.moveTo(条[0].px, 条[0].py);
+    for (let i = 1; i < 条.length; i++) ctx.lineTo(条[i].px, 条[i].py);
   }
-
-  for (const 项 of 结果) {
-    const 像素 = 数学转像素(项.x, 项.y, 画布宽, 画布高, 视图范围);
-    if (项.连) ctx.lineTo(像素.像素x, 像素.像素y);
-    else ctx.moveTo(像素.像素x, 像素.像素y);
-  }
-
   ctx.stroke();
 }

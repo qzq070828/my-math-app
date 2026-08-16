@@ -13,6 +13,7 @@ import { 计算曲线点 } from "../../math/evaluate";
 import { 生成导函数, 求导数值 } from "../../math/derivative";
 import { 生成矩形列表 } from "../../math/integral";
 
+
 const 动画周期 = 6000;
 
 // 画布宽高比和 mathToScreen 里默认视图范围的比例一致
@@ -98,7 +99,7 @@ function Canvas2D({ 函数列表 }) {
         if (!解析结果 || !解析结果.成功) return;
 
         const 计算函数 = 解析结果.计算函数;
-        const 点数组 = 计算曲线点(计算函数, 视图范围, 画布宽*2);
+        const 点数组 = 计算曲线点(计算函数, 视图范围, 画布宽/2);
 
         if (鼠标位置) {
           读数列表.push({
@@ -147,7 +148,7 @@ function Canvas2D({ 函数列表 }) {
         // 导函数：同色虚线
         if (项.显示导数) {
           const 导函数 = 生成导函数(计算函数);
-          const 导数点数组 = 计算曲线点(导函数, 视图范围, 画布宽*2);
+          const 导数点数组 = 计算曲线点(导函数, 视图范围, 画布宽/2);
           ctx.setLineDash([6, 4]);
           画曲线(ctx, 导数点数组, 画布宽, 画布高, 视图范围, 项.颜色, 导函数);
           ctx.setLineDash([]);
