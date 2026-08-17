@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { 可选颜色 } from "../../utils/colors";
 import { 解析表达式 } from "../../math/parse";
-import { 求导数值, 找区间内临界点 } from "../../math/derivative";
+import { 取导数, 找区间内临界点 } from "../../math/derivative";
 import { 检查表达式 } from "../../math/validate"
 
 // 停在临界点后，需要要拖出这么远才放开（数学单位）
@@ -31,14 +31,19 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   const 滑块范围 =
     Number.isFinite(项.滑块范围) && 项.滑块范围 > 0 ? 项.滑块范围 : 5;
 
+    // 符号求导优先：切线斜率和泰勒的一阶系数必须来自同一个来源
+  let 导数信息 = { 求值: () => NaN, 是符号: false, 公式: null };
   let 当前斜率 = NaN;
   if (可用) {
     try {
-      当前斜率 = 求导数值(解析结果.计算函数, 切点);
+      导数信息 = 取导数(项.表达式, 解析结果.计算函数, 1);
+      当前斜率 = 导数信息.求值(切点);
     } catch {
       当前斜率 = NaN;
     }
   }
+
+
 
   const 是临界点 = Number.isFinite(当前斜率) && Math.abs(当前斜率) < 0.001;
   // 导数关键点粘连停止功能，防止错过关键信息
@@ -55,7 +60,7 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
 
     let 临界点 = null;
     try {
-      临界点 = 找区间内临界点(解析结果.计算函数, 切点, 新值);
+      临界点 = 找区间内临界点(导数信息.求值, 切点, 新值);
     } catch {
       临界点 = null;
     }
@@ -154,6 +159,20 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
           />
           显示导数 f′(x)（虚线）
         </label>
+                {项.显示导数 && 导数信息.公式 && (
+          <div
+            style={{
+              marginTop: "0.2rem",
+              marginLeft: "1.2rem",
+              fontFamily: "monospace",
+              fontSize: "0.8rem",
+              color: "#555",
+            }}
+          >
+            f′(x) = {导数信息.公式}
+          </div>
+        )}
+
       </div>
 
       {/* 切线开关 + 切点控制 */}

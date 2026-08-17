@@ -10,8 +10,9 @@ import { 画十字准星 } from "../../drawing/draw2d/drawCrosshair";
 import { 画函数标签 } from "../../drawing/draw2d/drawLabel";
 import { 解析表达式 } from "../../math/parse";
 import { 计算曲线点 } from "../../math/evaluate";
-import { 生成导函数, 求导数值 } from "../../math/derivative";
+import { 取导数 , 求导数值 } from "../../math/derivative";
 import { 生成矩形列表 } from "../../math/integral";
+import "../../math/测试符号求导";
 
 
 const 动画周期 = 6000;
@@ -145,14 +146,23 @@ function Canvas2D({ 函数列表 }) {
           );
         }
 
-        // 导函数：同色虚线
+                // 导函数：同色虚线。符号求导优先，拿不到才退回数值
         if (项.显示导数) {
-          const 导函数 = 生成导函数(计算函数);
-          const 导数点数组 = 计算曲线点(导函数, 视图范围, 画布宽/2);
+          const 导 = 取导数(项.表达式, 计算函数, 1);
+          const 导数点数组 = 计算曲线点(导.求值, 视图范围, 画布宽 / 2);
           ctx.setLineDash([6, 4]);
-          画曲线(ctx, 导数点数组, 画布宽, 画布高, 视图范围, 项.颜色, 导函数);
+          画曲线(
+            ctx,
+            导数点数组,
+            画布宽,
+            画布高,
+            视图范围,
+            项.颜色,
+            导.求值
+          );
           ctx.setLineDash([]);
         }
+
 
         // 切线：追踪模式下切点跟着动画走，其次用滑块的值
         if (项.显示切线 || 项.追踪切线) {
@@ -162,7 +172,7 @@ function Canvas2D({ 函数列表 }) {
             ? 项.切点x
             : 0;
 
-          const 斜率 = 求导数值(计算函数, 切点);
+          const 斜率 = 取导数(项.表达式 ,计算函数 , 1).求值(切点);
           画切线(ctx, 计算函数, 切点, 斜率, 画布宽, 画布高, 视图范围);
         }
       } catch (错误) {
