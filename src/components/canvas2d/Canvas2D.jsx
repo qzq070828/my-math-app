@@ -10,10 +10,11 @@ import { 画十字准星 } from "../../drawing/draw2d/drawCrosshair";
 import { 画函数标签 } from "../../drawing/draw2d/drawLabel";
 import { 解析表达式 } from "../../math/parse";
 import { 计算曲线点 } from "../../math/evaluate";
-import { 取导数 , 求导数值 } from "../../math/derivative";
+import { 取导数, 求导数值 } from "../../math/derivative";
 import { 生成矩形列表 } from "../../math/integral";
-import "../../math/测试符号求导";
-
+import { 画泰勒 } from "../../drawing/draw2d/drawTaylor";
+import { 取泰勒 } from "../../math/taylor";
+import { 求容差区间 } from "../../math/errorInterval";
 
 const 动画周期 = 6000;
 
@@ -27,7 +28,7 @@ function Canvas2D({ 函数列表 }) {
   const [视图范围, 设置视图范围] = useState(默认视图范围);
   const [动画进度, 设置动画进度] = useState(0);
   const [画布尺寸, 设置画布尺寸] = useState({ 宽: 1200, 高: 800 });
-  const [鼠标位置, 设置鼠标位置] = useState(null); 
+  const [鼠标位置, 设置鼠标位置] = useState(null);
   // 数学坐标，离开时为 null
 
   const 拖拽中 = useRef(false);
@@ -58,6 +59,37 @@ function Canvas2D({ 函数列表 }) {
 
     return () => 观察器.disconnect();
   }, []);
+
+    // 滚轮缩放：必须用原生监听器 + passive: false
+  // React 的 onWheel 是 passive 的，preventDefault 不生效，
+  // 结果是图缩放了、页面也跟着滚 —— 两件事同时发生
+  useEffect(() => {
+    const 画板 = canvasRef.current;
+    if (!画板) return;
+
+    function 处理滚轮(事件) {
+      事件.preventDefault();
+      const 缩放系数 = 事件.deltaY < 0 ? 0.9 : 1.1;
+
+      设置视图范围((旧范围) => {
+        const x中心 = (旧范围.x最小 + 旧范围.x最大) / 2;
+        const y中心 = (旧范围.y最小 + 旧范围.y最大) / 2;
+        const 新x半宽 = ((旧范围.x最大 - 旧范围.x最小) / 2) * 缩放系数;
+        const 新y半高 = ((旧范围.y最大 - 旧范围.y最小) / 2) * 缩放系数;
+
+        return {
+          x最小: x中心 - 新x半宽,
+          x最大: x中心 + 新x半宽,
+          y最小: y中心 - 新y半高,
+          y最大: y中心 + 新y半高,
+        };
+      });
+    }
+
+    画板.addEventListener("wheel", 处理滚轮, { passive: false });
+    return () => 画板.removeEventListener("wheel", 处理滚轮);
+  }, []);
+
 
   // 动画循环功能：按真实时间进行，不依赖帧率无关
   useEffect(() => {
@@ -100,7 +132,7 @@ function Canvas2D({ 函数列表 }) {
         if (!解析结果 || !解析结果.成功) return;
 
         const 计算函数 = 解析结果.计算函数;
-        const 点数组 = 计算曲线点(计算函数, 视图范围, 画布宽/2);
+        const 点数组 = 计算曲线点(计算函数, 视图范围, 画布宽 / 2);
 
         if (鼠标位置) {
           读数列表.push({
@@ -127,7 +159,7 @@ function Canvas2D({ 函数列表 }) {
         if (项.追踪函数) {
           const 可见数量 = Math.max(2, Math.floor(点数组.length * 动画进度));
           const 部分点 = 点数组.slice(0, 可见数量);
-          画曲线(ctx, 部分点, 画布宽, 画布高, 视图范围, 项.颜色,计算函数);
+          画曲线(ctx, 部分点, 画布宽, 画布高, 视图范围, 项.颜色, 计算函数);
 
           const 末点 = 部分点[部分点.length - 1];
           if (末点) {
@@ -146,7 +178,7 @@ function Canvas2D({ 函数列表 }) {
           );
         }
 
-                // 导函数：同色虚线。符号求导优先，拿不到才退回数值
+        // 导函数：同色虚线。符号求导优先，拿不到才退回数值
         if (项.显示导数) {
           const 导 = 取导数(项.表达式, 计算函数, 1);
           const 导数点数组 = 计算曲线点(导.求值, 视图范围, 画布宽 / 2);
@@ -163,16 +195,52 @@ function Canvas2D({ 函数列表 }) {
           ctx.setLineDash([]);
         }
 
+        // 泰勒多项式
+        if (项.显示泰勒) {
+          const a = Number.isFinite(项.展开点a) ? 项.展开点a : 0;
+          const n = Number.isFinite(项.泰勒阶数) ? 项.泰勒阶数 : 1;
+
+          let 泰勒 = null;
+          try {
+            泰勒 = 取泰勒(项.表达式, 计算函数, a, n);
+          } catch {
+            泰勒 = null;
+          }
+
+          if (泰勒 && 泰勒.可用) {
+            let 容差区间 = null;
+            if (项.显示容差区间) {
+              try {
+                容差区间 = 求容差区间(计算函数, 泰勒, 项.容差 || 1e-3);
+              } catch {
+                容差区间 = null;
+              }
+            }
+
+            画泰勒(
+              ctx,
+              泰勒,
+              计算函数,
+              画布宽,
+              画布高,
+              视图范围,
+              项.颜色,
+              { 显示误差带: 项.显示误差带, 容差区间 }
+            );
+          }
+        }
+
+
 
         // 切线：追踪模式下切点跟着动画走，其次用滑块的值
         if (项.显示切线 || 项.追踪切线) {
           const 切点 = 项.追踪切线
             ? 视图范围.x最小 + (视图范围.x最大 - 视图范围.x最小) * 动画进度
             : Number.isFinite(项.切点x)
-            ? 项.切点x
-            : 0;
+              ? 项.切点x
+              : 0;
 
-          const 斜率 = 取导数(项.表达式 ,计算函数 , 1).求值(切点);
+          const 斜率 = 取导数(项.表达式, 计算函数, 1).求值(切点);
           画切线(ctx, 计算函数, 切点, 斜率, 画布宽, 画布高, 视图范围);
         }
       } catch (错误) {
@@ -205,26 +273,6 @@ function Canvas2D({ 函数列表 }) {
       像素y: (事件.clientY - 矩形.top) * (画板.height / 矩形.height),
     };
   }
-
-  function 处理滚轮(事件) {
-    事件.preventDefault();
-    const 缩放系数 = 事件.deltaY < 0 ? 0.9 : 1.1;
-
-    设置视图范围((旧范围) => {
-      const x中心 = (旧范围.x最小 + 旧范围.x最大) / 2;
-      const y中心 = (旧范围.y最小 + 旧范围.y最大) / 2;
-      const 新x半宽 = ((旧范围.x最大 - 旧范围.x最小) / 2) * 缩放系数;
-      const 新y半高 = ((旧范围.y最大 - 旧范围.y最小) / 2) * 缩放系数;
-
-      return {
-        x最小: x中心 - 新x半宽,
-        x最大: x中心 + 新x半宽,
-        y最小: y中心 - 新y半高,
-        y最大: y中心 + 新y半高,
-      };
-    });
-  }
-
   function 处理按下(事件) {
     拖拽中.current = true;
     上次鼠标.current = { x: 事件.clientX, y: 事件.clientY };
@@ -265,7 +313,7 @@ function Canvas2D({ 函数列表 }) {
         x最小: 旧范围.x最小 - 数学偏移x,
         x最大: 旧范围.x最大 - 数学偏移x,
         y最小: 旧范围.y最小 + 数学偏移y,
-         // y 轴方向相反，所以是 +
+        // y 轴方向相反，所以是 +
         y最大: 旧范围.y最大 + 数学偏移y,
       };
     });
@@ -279,7 +327,7 @@ function Canvas2D({ 函数列表 }) {
 
   function 处理离开() {
     拖拽中.current = false;
-    设置鼠标位置(null); 
+    设置鼠标位置(null);
     // 光标出界就收起准星
   }
 
@@ -310,7 +358,6 @@ function Canvas2D({ 函数列表 }) {
           cursor: 拖拽中.current ? "grabbing" : "crosshair",
           display: "block",
         }}
-        onWheel={处理滚轮}
         onMouseDown={处理按下}
         onMouseMove={处理移动}
         onMouseUp={处理松开}

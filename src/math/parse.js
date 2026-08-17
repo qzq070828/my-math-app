@@ -3,7 +3,7 @@ import { compile } from "mathjs";
 
 // 预处理 - 把用户的习惯写法转成 mathjs 认识的写法
 // 预处理 - 把用户的习惯写法转成 mathjs 认识的写法
-function 预处理(表达式字符串) {
+export function 预处理(表达式字符串) {
   let 结果 = 表达式字符串;
 
   // ln(...) → LNTEMP(...)  先占位，避免和下面 log 替换冲突
