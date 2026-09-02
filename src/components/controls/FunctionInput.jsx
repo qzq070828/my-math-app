@@ -5,15 +5,14 @@
 //   删除函数 : (id) => void
 //   添加函数 : () => void
 import FunctionRow from "./FunctionRow";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 function FunctionInput({ 函数列表, 更新函数, 删除函数, 添加函数 }) {
+  const { t } = useLanguage();
+
   return (
-    <div style={{ marginBottom: "1rem" }}>
-      <label
-        style={{ display: "block", marginBottom: "0.5rem", fontWeight: "bold" }}
-      >
-        输入函数 y =
-      </label>
+    <div>
+      <div className="区标题">{t("输入函数 y =")}</div>
 
       {函数列表.map((项) => (
         <FunctionRow
@@ -25,19 +24,8 @@ function FunctionInput({ 函数列表, 更新函数, 删除函数, 添加函数 
         />
       ))}
 
-      <button
-        onClick={添加函数}
-        style={{
-          width: "100%",
-          padding: "0.5rem",
-          fontSize: "0.95rem",
-          border: "1px dashed #999",
-          borderRadius: "4px",
-          background: "#fff",
-          cursor: "pointer",
-        }}
-      >
-        + 添加函数
+      <button className="按钮 添加按钮" onClick={添加函数}>
+        {t("+ 添加函数")}
       </button>
     </div>
   );

@@ -1,0 +1,638 @@
+/* 全局样式 - 2D 页面的设计基础
+ *
+ * 设计语言跟首页一致：白面板、细线 #DFE6F0、蓝 #1B4FD8、
+ * 等宽字体做数字和标签 —— 像一张绘图工作台，不像一堆表单。
+ */
+
+:root {
+  --ink: #0f1621;
+  --muted: #5b6879;
+  --line: #dfe6f0;
+  --bg: #f6f8fb;
+  --blue: #1b4fd8;
+  --blue-deep: #1740b0;
+  --blue-soft: #eef3fe;
+  --red: #dc2626;
+  --amber: #b45309;
+  --green: #15803d;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --导航高: 54px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 15px;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ———————— 通用控件 ———————— */
+
+.按钮 {
+  font: inherit;
+  font-size: 0.87rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.按钮:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.按钮:disabled {
+  color: var(--muted);
+  cursor: default;
+  background: var(--bg);
+}
+
+.按钮-主 {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+.按钮-主:hover:not(:disabled) {
+  background: var(--blue-deep);
+  border-color: var(--blue-deep);
+  color: #fff;
+}
+
+.按钮-播放中 {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: var(--red);
+}
+.按钮-播放中:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.按钮-整宽 {
+  width: 100%;
+}
+
+.添加按钮 {
+  width: 100%;
+  border-style: dashed;
+  color: var(--muted);
+}
+.添加按钮:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.输入框 {
+  font: inherit;
+  font-size: 0.87rem;
+  padding: 0.32rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.输入框:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(27, 79, 216, 0.14);
+}
+.输入框.错误 {
+  border-color: var(--red);
+}
+
+.表达式框 {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+}
+
+select.输入框 {
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--blue);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+input[type="range"] {
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+button:focus-visible,
+.输入框:focus-visible {
+  outline: 2px solid rgba(27, 79, 216, 0.45);
+  outline-offset: 1px;
+}
+
+/* ———————— 文字角色 ———————— */
+
+.区标题 {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+}
+
+.微标 {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.代码 {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+/* ———————— 导航栏 ———————— */
+
+.导航 {
+  height: var(--导航高);
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 0 1.2rem;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.品牌 {
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.品牌 span {
+  color: var(--blue);
+}
+
+.导航链接 {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.导航链接:hover {
+  color: var(--blue);
+}
+
+/* ———————— 2D 页布局 ———————— */
+
+.布局根 {
+  display: flex;
+  height: calc(100vh - var(--导航高));
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
+}
+
+.侧栏 {
+  width: 272px;
+  padding: 1rem;
+  background: #fff;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.侧栏-右 {
+  width: 304px;
+  border-right: none;
+  border-left: 1px solid var(--line);
+}
+
+.主区 {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.主区上 {
+  padding: 1rem 1rem 0;
+  flex-shrink: 0;
+}
+
+.主区下 {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  min-height: 0;
+}
+
+.抽屉 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 480px;
+  max-width: 92vw;
+  height: 100%;
+  background: #fff;
+  border-right: 1px solid var(--line);
+  box-shadow: 6px 0 28px rgba(15, 22, 33, 0.12);
+  overflow-y: auto;
+  z-index: 10;
+  padding: 1rem 1.25rem 1.5rem;
+}
+
+.抽屉头 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -1rem -1.25rem 0.75rem;
+  padding: 0.8rem 1.25rem;
+  position: sticky;
+  top: -1rem;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.画布区 {
+  width: 100%;
+}
+/* 只给底层画布上白底和边框。
+   顶层是十字准星层，必须透明，否则会盖住下面的曲线。
+   边框和圆角挂在外层容器上，两层才对得齐 */
+.画布区 .底层画布 {
+  background: #fff;
+  border-radius: 4px;
+}
+
+.画布区 .画布框 {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(15, 22, 33, 0.06);
+  overflow: hidden;
+}
+
+
+/* ———————— 函数行 ———————— */
+
+.函数行 {
+  margin-bottom: 1rem;
+}
+
+.行顶 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.色钮 {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: transform 0.12s;
+}
+.色钮:hover {
+  transform: scale(1.12);
+}
+
+.删钮 {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.删钮:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.错提 {
+  margin: 0.3rem 0 0 2.1rem;
+  font-size: 0.78rem;
+  color: var(--red);
+}
+
+.子区 {
+  margin: 0.55rem 0 0 2.1rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.复选行 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.联排 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.导数式 {
+  margin-left: 1.55rem;
+  color: var(--muted);
+  overflow-x: auto;
+}
+
+.斜率读数 {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+.斜率读数.临界 {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.调色盘 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.调色钮 {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s;
+}
+.调色钮:hover {
+  transform: scale(1.15);
+}
+.调色钮.选中 {
+  border-color: var(--ink);
+}
+
+/* ———————— 右侧面板 ———————— */
+
+.面板 {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.面板头 {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0.9rem;
+  border: none;
+  background: #fff;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.面板头:hover {
+  background: var(--blue-soft);
+}
+
+.面板箭头 {
+  font-size: 0.7rem;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.面板箭头.开 {
+  transform: rotate(180deg);
+}
+
+.面板体 {
+  padding: 0.25rem 0.9rem 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.功能卡 {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 0.85rem;
+}
+
+.功能卡头 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.4rem;
+}
+
+.色点 {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.静态题 {
+  padding: 0.65rem 0.9rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.提示语 {
+  font-size: 0.78rem;
+  color: var(--amber);
+}
+
+/* ———————— 读数卡片（积分 / 泰勒） ———————— */
+
+.读数卡 {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--卡色, var(--blue));
+  border-radius: 4px;
+  padding: 0.9rem 1.1rem;
+  box-shadow: 0 1px 2px rgba(15, 22, 33, 0.04);
+}
+
+.读数卡头 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+  font-size: 1.05rem;
+}
+
+.公式带 {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.55rem 0.8rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.公式带 + .公式带 {
+  margin-top: 0.5rem;
+}
+
+.数字格 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.数字块 {
+  background: var(--bg);
+  border-radius: 3px;
+  padding: 0.45rem 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  overflow-x: auto;
+}
+
+.数字块标 {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 0.1rem;
+}
+
+.答案行 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.5rem;
+  margin-top: 0.7rem;
+  font-family: var(--mono);
+  font-size: 1rem;
+}
+
+.答案块 {
+  font-weight: 700;
+  color: var(--blue-deep);
+  padding: 0.25rem 0.7rem;
+  border-radius: 3px;
+}
+
+.误差好 {
+  color: var(--green);
+}
+.误差大 {
+  color: var(--amber);
+}
+
+.容差条 {
+  margin-top: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 3px;
+  font-size: 0.85rem;
+}
+
+.分割线 {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ———————— 系数表 ———————— */
+
+.系数表 {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-bottom: 0.9rem;
+}
+.系数表 th {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--bg);
+  white-space: nowrap;
+}
+.系数表 th,
+.系数表 td {
+  border: 1px solid var(--line);
+  padding: 0.32rem 0.55rem;
+  text-align: left;
+}
+.系数表 td.数 {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+/* ———————— KaTeX 微调 ———————— */
+
+.katex {
+  font-size: 1.04em;
+}
+.katex-display {
+  margin: 0.25rem 0;
+}
+.tex.块式 {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0;
+}
+/* 系数为零的项对曲线没有贡献，压暗但不隐藏 ——
+   sin 的偶数项全为零，这个「隔一项一个洞」的模式本身就是要看的东西 */
+.系数表 tr.零项 {
+  color: #aaa;
+}
+
+.读数卡头 .参数 {
+  font-weight: 400;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+ 

@@ -2,23 +2,28 @@
 //
 // 系数表把「公式是怎么拼出来的」摊开：每一行是 f⁽ᵏ⁾(a) 除以 k! 得到 aₖ，
 // 最后一列是这一项的实际写法。学生对着表能自己把公式拼回去。
+//
+// 所有数学内容走 <Tex>：taylor.js 吐的是 LaTeX 源码，
+// 当字符串直接印会看到一堆 \frac{}{}。
+// 样式全部走 ui.css 的类名，只有函数颜色是运行时的值，走 --卡色。
 
 import { 解析表达式 } from "../../math/parse";
 import { 取泰勒 } from "../../math/taylor";
 import { 求容差区间 } from "../../math/errorInterval";
+import { 数字转Tex, 变量Tex, 表达式转Tex } from "../../math/tex";
+import { useLanguage } from "../../i18n/LanguageContext";
+import Tex from "../common/Tex";
+import NumberInput from "./NumberInput";
 
+// 纯文本数字，给 t() 的参数用（那些地方进不了 KaTeX）
 function 格式(值, 位数 = 4) {
   if (!Number.isFinite(值)) return "—";
   if (Math.abs(值 - Math.round(值)) < 1e-10) return String(Math.round(值));
-  return 值.toPrecision(位数);
-}
-
-function 变量写法(a) {
-  if (Math.abs(a) < 1e-12) return "x";
-  return `(x ${a > 0 ? "-" : "+"} ${格式(Math.abs(a))})`;
+  return String(Number(值.toPrecision(位数)));
 }
 
 function TaylorReadout({ 函数列表, 更新函数 }) {
+  const { t } = useLanguage();
   const 要显示的 = 函数列表.filter((项) => 项.显示泰勒 && 项.表达式);
   if (要显示的.length === 0) return null;
 
@@ -50,14 +55,10 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
           return (
             <div
               key={项.id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                padding: "1rem",
-                color: "#999",
-              }}
+              className="读数卡"
+              style={{ "--卡色": 项.颜色, color: "var(--muted)" }}
             >
-              {项.表达式} 的泰勒展开算不出来
+              {t("算不出来", 项.表达式)}
               {泰勒 && 泰勒.原因 ? ` —— ${泰勒.原因}` : ""}
             </div>
           );
@@ -87,156 +88,116 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
           }
         }
 
-        const 变量 = 变量写法(a);
+        const 变量 = 变量Tex(a);
+        const 式子Tex = 表达式转Tex(项.表达式);
 
         return (
-          <div
-            key={项.id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "1rem",
-              background: "#fff",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                fontWeight: "bold",
-                fontSize: "1.05rem",
-                marginBottom: "0.75rem",
-              }}
-            >
-              <span
-                style={{
-                  width: "0.9rem",
-                  height: "0.9rem",
-                  borderRadius: "50%",
-                  background: 项.颜色,
-                  display: "inline-block",
-                }}
-              />
-              {项.表达式} 在 a = {格式(a)} 处展开到 {泰勒.有效阶} 阶
+          <div key={项.id} className="读数卡" style={{ "--卡色": 项.颜色 }}>
+            <div className="读数卡头">
+              <span className="色点" style={{ background: 项.颜色 }} />
+              {式子Tex ? <Tex 源码={式子Tex} /> : 项.表达式}
+              <span className="参数">
+                {t("展开参数", 格式(a), 泰勒.有效阶)}
+              </span>
             </div>
 
             {/* 系数表 */}
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "0.9rem",
-                fontFamily: "monospace",
-                marginBottom: "1rem",
-              }}
-            >
+            <table className="系数表">
               <thead>
-                <tr style={{ background: "#f5f5f5" }}>
-                  <th style={单元格}>k</th>
-                  <th style={单元格}>f⁽ᵏ⁾(a)</th>
-                  <th style={单元格}>k!</th>
-                  <th style={单元格}>aₖ = f⁽ᵏ⁾(a)/k!</th>
-                  <th style={单元格}>这一项</th>
+                <tr>
+                  <th>
+                    <Tex 源码="k" />
+                  </th>
+                  <th>
+                    <Tex 源码="f^{(k)}(a)" />
+                  </th>
+                  <th>
+                    <Tex 源码="k!" />
+                  </th>
+                  <th>
+                    <Tex 源码="a_k = \dfrac{f^{(k)}(a)}{k!}" />
+                  </th>
+                  <th>{t("这一项")}</th>
                 </tr>
               </thead>
               <tbody>
-                {泰勒.系数.map((系数值, k) => (
-                  <tr key={k}>
-                    <td style={单元格}>{k}</td>
-                    <td style={单元格}>{格式(泰勒.导数值[k])}</td>
-                    <td style={单元格}>{泰勒.阶乘表[k]}</td>
-                    <td style={单元格}>{格式(系数值)}</td>
-                    <td style={单元格}>
-                      {格式(系数值)}
-                      {k === 0 ? "" : k === 1 ? 变量 : `${变量}^${k}`}
-                    </td>
-                  </tr>
-                ))}
+                {泰勒.系数.map((系数值, k) => {
+                  const 为零 =
+                    !Number.isFinite(系数值) || Math.abs(系数值) < 1e-12;
+                  return (
+                    <tr key={k} className={为零 ? "零项" : undefined}>
+                      <td className="数">{k}</td>
+                      <td className="数">
+                        <Tex 源码={数字转Tex(泰勒.导数值[k])} />
+                      </td>
+                      <td className="数">{泰勒.阶乘表[k]}</td>
+                      <td className="数">
+                        <Tex 源码={数字转Tex(系数值)} />
+                      </td>
+                      <td className="数">
+                        {为零 ? (
+                          t("这项为零")
+                        ) : (
+                          <Tex
+                            源码={
+                              数字转Tex(系数值) +
+                              (k === 0
+                                ? ""
+                                : k === 1
+                                  ? 变量
+                                  : `${变量}^{${k}}`)
+                            }
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
-            {/* 两种公式 */}
-            <div style={公式块}>
-              <div style={{ color: "#666", fontSize: "0.8rem" }}>字母式</div>
-              <div style={{ fontFamily: "monospace", marginTop: "0.2rem" }}>
-                P{泰勒.有效阶}(x) = {泰勒.字母公式}
-              </div>
+            {/* 两种公式：字母式看结构，数字式看结果 */}
+            <div className="公式带">
+              <div className="数字块标">{t("字母式")}</div>
+              <Tex 块 源码={`P_{${泰勒.有效阶}}(x) = ${泰勒.字母公式}`} />
             </div>
 
-            <div style={{ ...公式块, marginTop: "0.5rem" }}>
-              <div style={{ color: "#666", fontSize: "0.8rem" }}>数字式</div>
-              <div style={{ fontFamily: "monospace", marginTop: "0.2rem" }}>
-                P{泰勒.有效阶}(x) = {泰勒.数字公式}
-              </div>
+            <div className="公式带">
+              <div className="数字块标">{t("数字式")}</div>
+              <Tex 块 源码={`P_{${泰勒.有效阶}}(x) = ${泰勒.数字公式}`} />
             </div>
 
             {/* 点对比 */}
-            <div
-              style={{
-                marginTop: "1rem",
-                paddingTop: "0.75rem",
-                borderTop: "1px solid #eee",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.4rem",
-                  fontSize: "0.9rem",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                <span>在 x =</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={Number(对比x.toFixed(3))}
-                  onChange={(事件) =>
-                    更新函数(项.id, "对比点x", Number(事件.target.value))
-                  }
+            <div className="分割线">
+              <div className="联排" style={{ marginBottom: "0.5rem" }}>
+                <span>{t("在 x =")}</span>
+                <NumberInput
+                  值={对比x}
+                  提交={(数) => 更新函数(项.id, "对比点x", 数)}
                   style={{ width: "5rem", padding: "0.2rem" }}
                 />
-                <span>处比较</span>
+                <span>{t("处比较")}</span>
               </div>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: "0.5rem",
-                  fontFamily: "monospace",
-                  fontSize: "0.95rem",
-                }}
-              >
-                <div style={数字块}>
-                  <div style={{ color: "#666", fontSize: "0.75rem" }}>真值 f(x)</div>
-                  {格式(真值, 6)}
+              <div className="数字格">
+                <div className="数字块">
+                  <div className="数字块标">{t("真值 f(x)")}</div>
+                  <Tex 源码={数字转Tex(真值, 6)} />
                 </div>
-                <div style={数字块}>
-                  <div style={{ color: "#666", fontSize: "0.75rem" }}>
-                    近似 P{泰勒.有效阶}(x)
-                  </div>
-                  {格式(近似值, 6)}
+                <div className="数字块">
+                  <div className="数字块标">{t("近似", 泰勒.有效阶)}</div>
+                  <Tex 源码={数字转Tex(近似值, 6)} />
                 </div>
                 <div
-                  style={{
-                    ...数字块,
-                    color: 绝对误差 < 1e-3 ? "#15803d" : "#b45309",
-                    fontWeight: "bold",
-                  }}
+                  className={
+                    "数字块 " + (绝对误差 < 1e-3 ? "误差好" : "误差大")
+                  }
+                  style={{ fontWeight: 700 }}
                 >
-                  <div
-                    style={{
-                      color: "#666",
-                      fontSize: "0.75rem",
-                      fontWeight: "normal",
-                    }}
-                  >
-                    误差
+                  <div className="数字块标" style={{ fontWeight: 400 }}>
+                    {t("误差")}
                   </div>
-                  {格式(绝对误差, 4)}
+                  <Tex 源码={数字转Tex(绝对误差, 4)} />
                   {Number.isFinite(相对误差) && (
                     <span style={{ fontSize: "0.8rem" }}>
                       {" "}
@@ -249,34 +210,24 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
 
             {/* 容差区间 */}
             {项.显示容差区间 && 区间 && (
-              <div
-                style={{
-                  marginTop: "0.75rem",
-                  padding: "0.5rem",
-                  background: "#f0f9ff",
-                  borderRadius: "4px",
-                  fontSize: "0.9rem",
-                }}
-              >
+              <div className="容差条">
                 {区间.可用 ? (
                   <>
-                    误差 ≤ {项.容差} 的区间：
-                    <strong style={{ fontFamily: "monospace" }}>
-                      {" "}
-                      [{格式(区间.左)}, {格式(区间.右)}]
-                    </strong>
-                    ，宽 {格式(区间.宽度)}
+                    {t("容差区间说明", 项.容差)}{" "}
+                    <Tex
+                      源码={`[${数字转Tex(区间.左)},\\ ${数字转Tex(区间.右)}]`}
+                    />
+                    {t("宽", 格式(区间.宽度))}
                     {(区间.左到头 || 区间.右到头) && (
-                      <span style={{ color: "#666" }}> （扫描范围内未越界，实际更宽）</span>
+                      <span style={{ color: "var(--muted)" }}>
+                        {" "}
+                        {t("未越界")}
+                      </span>
                     )}
-                    {区间.太窄 && (
-                      <div style={{ color: "#b45309", marginTop: "0.2rem" }}>
-                        区间太窄，图上几乎看不见 —— 试试提高阶数或放宽容差
-                      </div>
-                    )}
+                    {区间.太窄 && <div className="提示语">{t("区间太窄")}</div>}
                   </>
                 ) : (
-                  <span style={{ color: "#b45309" }}>{区间.原因}</span>
+                  <span className="提示语">{区间.原因}</span>
                 )}
               </div>
             )}
@@ -286,26 +237,5 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
     </div>
   );
 }
-
-const 单元格 = {
-  border: "1px solid #e5e5e5",
-  padding: "0.3rem 0.5rem",
-  textAlign: "left",
-};
-
-const 公式块 = {
-  padding: "0.5rem",
-  background: "#f8f8f8",
-  borderRadius: "4px",
-  fontSize: "0.9rem",
-  wordBreak: "break-all",
-  lineHeight: 1.6,
-};
-
-const 数字块 = {
-  padding: "0.4rem",
-  background: "#fafafa",
-  borderRadius: "4px",
-};
 
 export default TaylorReadout;

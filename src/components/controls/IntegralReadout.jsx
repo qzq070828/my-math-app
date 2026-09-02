@@ -1,20 +1,35 @@
 // 画布下方的数据条 - 黎曼和公式、当前值、真实答案、误差
 import { 解析表达式 } from "../../math/parse";
 import { 求黎曼和, 求参考值, n序列 } from "../../math/integral";
+import { 表达式转Tex, 数字转Tex } from "../../math/tex";
+import { useLanguage } from "../../i18n/LanguageContext";
+import Tex from "../common/Tex";
 
-// 按端点方式给出对应的求和写法（AP 会考三者的区别）
-function 取样点写法(端点方式) {
-  if (端点方式 === "左") return { 取样: "a + iΔx", 范围: "i = 0 … n−1" };
-  if (端点方式 === "中") return { 取样: "a + (i−½)Δx", 范围: "i = 1 … n" };
-  return { 取样: "a + iΔx", 范围: "i = 1 … n" };
+// 端点方式的值是内部数据（左/右/中），显示时映射到文案 key
+const 端点键 = { 左: "左端点", 右: "右端点", 中: "中点" };
+
+// 按端点方式给出对应的求和式 LaTeX（AP 会考三者的区别）
+function 求和Tex(端点方式) {
+  if (端点方式 === "左")
+    return "\\sum_{i=0}^{n-1} f(a + i\\,\\Delta x)\\,\\Delta x";
+  if (端点方式 === "中")
+    return "\\sum_{i=1}^{n} f\\!\\left(a + \\left(i - \\tfrac{1}{2}\\right)\\Delta x\\right)\\Delta x";
+  return "\\sum_{i=1}^{n} f(a + i\\,\\Delta x)\\,\\Delta x";
 }
 
 function IntegralReadout({ 函数列表 }) {
+  const { t } = useLanguage();
   const 开启的 = 函数列表.filter((项) => 项.显示积分 && 项.表达式);
   if (!开启的.length) return null;
 
   return (
-    <div style={{ marginTop: "1rem", display: "grid", gap: "1rem" }}>
+    <div
+      style={{
+        marginTop: "1rem",
+        display: "grid",
+        gap: "1rem",
+      }}
+    >
       {开启的.map((项) => {
         // 半截表达式可能抛错，包一层
         let 黎曼和 = NaN;
@@ -53,102 +68,59 @@ function IntegralReadout({ 函数列表 }) {
 
         // 走到序列末尾就算逼近完成，答案区高亮
         const 已完成 = !项.积分播放中 && n >= n序列[n序列.length - 1];
-        const 写法 = 取样点写法(项.端点方式);
+        const 式Tex = 表达式转Tex(项.表达式);
 
         return (
           <div
             key={项.id}
-            style={{
-              padding: "1rem 1.25rem",
-              border: `2px solid ${项.颜色}`,
-              borderRadius: "8px",
-              background: "#fff",
-            }}
+            className="读数卡"
+            style={{ "--卡色": 项.颜色 }}
           >
-            {/* 标题：这是哪条函数的哪个积分 */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                fontSize: "1.15rem",
-                fontWeight: "bold",
-                marginBottom: "0.75rem",
-              }}
-            >
-              <span
-                style={{
-                  width: "1rem",
-                  height: "1rem",
-                  borderRadius: "50%",
-                  backgroundColor: 项.颜色,
-                  flexShrink: 0,
-                }}
+            {/* 标题：这是哪条函数的哪个积分（真排版） */}
+            <div className="读数卡头">
+              <span className="色点" style={{ backgroundColor: 项.颜色 }} />
+              <Tex
+                源码={`\\int_{${数字转Tex(a)}}^{${数字转Tex(b)}} ${式Tex ?? "f(x)"} \\, dx`}
               />
-              <span style={{ fontFamily: "monospace" }}>
-                ∫ 从 {a} 到 {b} 　{项.表达式} dx
+              <span className="微标">
+                {t("端点方式说明", t(端点键[项.端点方式] || "右端点"))}
               </span>
             </div>
 
             {/* 黎曼和的数学写法 */}
-            <div
-              style={{
-                fontFamily: "monospace",
-                fontSize: "1.05rem",
-                lineHeight: 2,
-                padding: "0.75rem",
-                background: "#f8f8f8",
-                borderRadius: "6px",
-              }}
-            >
-              <div>
-                Σ f({写法.取样}) · Δx 　　（{写法.范围}，{项.端点方式}端点）
-              </div>
-              <div style={{ color: "#555" }}>
-                Δx = (b − a) / n = ({b} − {a}) / {n} ={" "}
-                {Number.isFinite(Δx) ? Δx.toFixed(5) : "—"}
-              </div>
-              <div style={{ fontWeight: "bold", fontSize: "1.2rem" }}>
-                n = {n} 　→ 　黎曼和 ={" "}
-                {Number.isFinite(黎曼和) ? 黎曼和.toFixed(5) : "无法计算"}
-              </div>
+            <div className="公式带">
+              <Tex 块 源码={求和Tex(项.端点方式)} />
+              <Tex
+                块
+                源码={`\\Delta x = \\frac{b - a}{n} = \\frac{${数字转Tex(b)} - (${数字转Tex(a)})}{${n}} = ${数字转Tex(Δx, 5)}`}
+              />
             </div>
 
             {/* 答案与误差 */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "1.5rem",
-                marginTop: "0.75rem",
-                fontFamily: "monospace",
-                fontSize: "1.15rem",
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: "bold",
-                  color: "#1e40af",
-                  padding: "0.35rem 0.75rem",
-                  borderRadius: "6px",
-                  background: 已完成 ? "#dbeafe" : "transparent",
-                }}
-              >
-                答案 = {Number.isFinite(参考值) ? 参考值.toFixed(5) : "无法计算"}
+            <div className="答案行">
+              <div>
+                n = {n} → {t("黎曼和")} ={" "}
+                {Number.isFinite(黎曼和) ? 黎曼和.toFixed(5) : t("无法计算")}
               </div>
 
               <div
-                style={{
-                  fontWeight: "bold",
-                  color:
-                    Number.isFinite(相对误差) && 相对误差 < 1
-                      ? "#15803d"
-                      : "#b45309",
-                  padding: "0.35rem 0",
-                }}
+                className="答案块"
+                style={{ background: 已完成 ? "#dbeafe" : "transparent" }}
               >
-                误差 = {Number.isFinite(绝对误差) ? 绝对误差.toFixed(5) : "—"}
-                {Number.isFinite(相对误差) && `　（${相对误差.toFixed(2)}%）`}
+                {t("答案")} ={" "}
+                {Number.isFinite(参考值) ? 参考值.toFixed(5) : t("无法计算")}
+              </div>
+
+              <div
+                className={`答案块 ${
+                  Number.isFinite(相对误差) && 相对误差 < 1
+                    ? "误差好"
+                    : "误差大"
+                }`}
+              >
+                {t("误差")} ={" "}
+                {Number.isFinite(绝对误差) ? 绝对误差.toFixed(5) : "—"}
+                {Number.isFinite(相对误差) && `（${相对误差.toFixed(2)}%）`}
               </div>
             </div>
           </div>

@@ -5,6 +5,8 @@
 // 这是产品最独特的一件事，所以放在第一屏，而不是写成一句口号。
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import LanguageSwitch from "../components/layout/LanguageSwitch";
+import { useLanguage } from "../i18n/LanguageContext";
 
 // ———————— 主视觉画布 ————————
 
@@ -196,13 +198,16 @@ function 演示画布() {
 
 // ———————— 页面 ————————
 
+// 标题存 key，渲染时才翻 —— 这个数组在组件外，拿不到 t
 const 功能列表 = [
-  { 记号: "f′(x)", 标题: "导数与切线" },
-  { 记号: "∫ f dx", 标题: "黎曼和积分" },
-  { 记号: "Pₙ(x)", 标题: "泰勒展开" },
+  { 记号: "f′(x)", 标题键: "导数与切线" },
+  { 记号: "∫ f dx", 标题键: "黎曼和积分" },
+  { 记号: "Pₙ(x)", 标题键: "泰勒展开" },
 ];
 
 function HomePage() {
+  const { t } = useLanguage();
+
   return (
     <div style={页面}>
       <div style={内容区}>
@@ -211,12 +216,19 @@ function HomePage() {
             Visual<span style={{ color: "#1B4FD8" }}>Math</span>
           </div>
           <div style={副标}>2D Graphing</div>
+          <div style={{ marginLeft: "auto" }}>
+            <LanguageSwitch />
+          </div>
         </header>
 
+        {/* 标题拆成四段：中文是「把近似『看』成一件 / 会动的事」，
+            变蓝的字夹在句子中间，英文语序对不上，只能拆开各翻各的 */}
         <h1 style={大标题}>
-          把近似<span style={{ color: "#1B4FD8" }}>看</span>成一件
+          {t("标题前")}
+          <span style={{ color: "#1B4FD8" }}>{t("标题重点")}</span>
+          {t("标题后")}
           <br />
-          会动的事
+          {t("标题次行")}
         </h1>
 
         <div style={舞台}>
@@ -225,7 +237,7 @@ function HomePage() {
 
         <div style={{ marginTop: "2rem" }}>
           <Link to="/2d/graph" style={按钮}>
-            打开 2D 图形
+            {t("打开 2D 图形")}
           </Link>
         </div>
 
@@ -233,7 +245,7 @@ function HomePage() {
           {功能列表.map((项) => (
             <div key={项.记号} style={功能行}>
               <div style={记号样式}>{项.记号}</div>
-              <div style={标题样式}>{项.标题}</div>
+              <div style={标题样式}>{t(项.标题键)}</div>
             </div>
           ))}
         </div>

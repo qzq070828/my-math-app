@@ -25,7 +25,10 @@ const 常见错写 = {
   squareroot: "sqrt",
 };
 
-// 返回错误提示字符串；没问题返回 null
+// 返回 { 键, 参数? }，交给 i18n 的 t() 翻译成提示文字；没问题返回 null
+// 注意：必须返回对象。之前少括号时返回的是字符串，FunctionRow 按
+// 「自查错误.键」取到 undefined，t(undefined) 也是 undefined，
+// 结果少括号时界面上什么提示都没有。
 export function 检查表达式(原文) {
   const 文本 = (原文 || "").trim();
   if (!文本) return null; // 空输入不算错
@@ -35,10 +38,10 @@ export function 检查表达式(原文) {
   for (const 字符 of 文本) {
     if (字符 === "(") 深度++;
     if (字符 === ")") 深度--;
-    if (深度 < 0) return "多了一个右括号 )";
+    if (深度 < 0) return { 键: "多了右括号" };
   }
   if (深度 > 0) {
-    return 深度 === 1 ? "少了一个右括号 )" : `少了 ${深度} 个右括号 )`;
+    return { 键: "少了右括号", 参数: [深度] };
   }
 
   // 认不出的字母串：可能是打错的函数名
@@ -47,12 +50,12 @@ export function 检查表达式(原文) {
     const 小写 = 词.toLowerCase();
     if (小写 === "x" || 小写 === "e" || 小写 === "pi") continue;
     if (已知函数.includes(小写)) continue;
-    if (常见错写[小写]) return `不认识 ${词}，你是想输 ${常见错写[小写]} 吗？`;
-    return `不认识 ${词}，检查一下拼写`;
+    if (常见错写[小写]) return { 键: "不认识但有建议", 参数: [词, 常见错写[小写]] };
+    return { 键: "不认识", 参数: [词] };
   }
 
   // 结尾是运算符：通常是还没打完
-  if (/[+\-*/^(]$/.test(文本)) return "算式还没写完";
+  if (/[+\-*/^(]$/.test(文本)) return { 键: "算式没写完" };
 
   return null;
 }

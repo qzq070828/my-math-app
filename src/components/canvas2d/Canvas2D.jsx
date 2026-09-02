@@ -10,8 +10,7 @@ import { 画十字准星 } from "../../drawing/draw2d/drawCrosshair";
 import { 画函数标签 } from "../../drawing/draw2d/drawLabel";
 import { 解析表达式 } from "../../math/parse";
 import { 计算曲线点 } from "../../math/evaluate";
-import { 取导数, 求导数值 } from "../../math/derivative";
-import { 生成矩形列表 } from "../../math/integral";
+import { 取导数 } from "../../math/derivative";
 import { 画泰勒 } from "../../drawing/draw2d/drawTaylor";
 import { 取泰勒 } from "../../math/taylor";
 import { 求容差区间 } from "../../math/errorInterval";
@@ -21,13 +20,27 @@ const 动画周期 = 6000;
 // 画布宽高比和 mathToScreen 里默认视图范围的比例一致
 const 宽高比 = 1.5;
 
+// 两层画布叠放：
+//   底层 —— 网格、坐标轴、曲线、黎曼、泰勒、切线。只在函数/视野/动画/尺寸
+//     变化时重画。这一层很贵（自适应采样 + 积分填充）。
+//   顶层 —— 只有十字准星和悬停读数。鼠标每动一下只重画这层，
+//     成本是每条函数一次代入求值，不再触发全量重采样。
+// 之前合在一层、effect 依赖里有「鼠标位置」：鼠标一晃所有函数重新采样，
+// 准星掉到十几帧。
 function Canvas2D({ 函数列表 }) {
-  const canvasRef = useRef(null);
+  const 底层Ref = useRef(null);
+  const 顶层Ref = useRef(null);
   const 容器Ref = useRef(null);
 
   const [视图范围, 设置视图范围] = useState(默认视图范围);
   const [动画进度, 设置动画进度] = useState(0);
   const [画布尺寸, 设置画布尺寸] = useState({ 宽: 1200, 高: 800 });
+  // 高分屏：画布内部像素要按设备像素比放大，否则浏览器会把图拉伸放大 → 糊
+  // 封顶 2 是为了不在 3x 屏上白白画 9 倍的像素
+  const [像素比, 设置像素比] = useState(() =>
+    Math.min(window.devicePixelRatio || 1, 2)
+  );
+
   const [鼠标位置, 设置鼠标位置] = useState(null);
   // 数学坐标，离开时为 null
 
@@ -57,14 +70,24 @@ function Canvas2D({ 函数列表 }) {
     });
     观察器.observe(容器);
 
-    return () => 观察器.disconnect();
+    // 把窗口拖到另一块屏上，devicePixelRatio 会变
+    function 同步像素比() {
+      设置像素比(Math.min(window.devicePixelRatio || 1, 2));
+    }
+    window.addEventListener("resize", 同步像素比);
+
+    return () => {
+      观察器.disconnect();
+      window.removeEventListener("resize", 同步像素比);
+    };
   }, []);
 
-    // 滚轮缩放：必须用原生监听器 + passive: false
+  // 滚轮缩放：必须用原生监听器 + passive: false
   // React 的 onWheel 是 passive 的，preventDefault 不生效，
   // 结果是图缩放了、页面也跟着滚 —— 两件事同时发生
+  // 监听器挂在顶层画布上：它叠在最上面，事件先落到它
   useEffect(() => {
-    const 画板 = canvasRef.current;
+    const 画板 = 顶层Ref.current;
     if (!画板) return;
 
     function 处理滚轮(事件) {
@@ -90,7 +113,6 @@ function Canvas2D({ 函数列表 }) {
     return () => 画板.removeEventListener("wheel", 处理滚轮);
   }, []);
 
-
   // 动画循环功能：按真实时间进行，不依赖帧率无关
   useEffect(() => {
     if (!需要动画) return;
@@ -109,20 +131,20 @@ function Canvas2D({ 函数列表 }) {
     return () => cancelAnimationFrame(帧id);
   }, [需要动画]);
 
+  // ———————— 底层：静态内容（贵，不跟鼠标走） ————————
   useEffect(() => {
-    const 画板 = canvasRef.current;
+    const 画板 = 底层Ref.current;
     if (!画板) return;
 
     const ctx = 画板.getContext("2d");
-    const 画布宽 = 画板.width;
-    const 画布高 = 画板.height;
+    // 逻辑尺寸用 CSS 尺寸，缩放交给 transform —— 下游画图代码不用改
+    const 画布宽 = 画布尺寸.宽;
+    const 画布高 = 画布尺寸.高;
+    ctx.setTransform(像素比, 0, 0, 像素比, 0, 0);
 
     ctx.clearRect(0, 0, 画布宽, 画布高);
     画网格(ctx, 画布宽, 画布高, 视图范围);
     画坐标轴(ctx, 画布宽, 画布高, 视图范围);
-
-    // 悬停读数：每条函数在光标 x 处的值 并且画完曲线后统一显示
-    const 读数列表 = [];
 
     函数列表.forEach((项) => {
       if (!项.表达式) return;
@@ -134,25 +156,21 @@ function Canvas2D({ 函数列表 }) {
         const 计算函数 = 解析结果.计算函数;
         const 点数组 = 计算曲线点(计算函数, 视图范围, 画布宽 / 2);
 
-        if (鼠标位置) {
-          读数列表.push({
-            表达式: 项.表达式,
-            颜色: 项.颜色,
-            值: 计算函数(鼠标位置.x),
-          });
-        }
-
         // 黎曼矩形展示功能：垫在曲线下面，优先进行
         if (项.显示积分) {
           const 当前n = Number.isFinite(项.当前n) && 项.当前n > 0 ? 项.当前n : 1;
-          const 矩形列表 = 生成矩形列表(
+          画黎曼矩形(
+            ctx,
             计算函数,
             项.积分下限,
             项.积分上限,
             当前n,
-            项.端点方式
+            项.端点方式,
+            画布宽,
+            画布高,
+            视图范围,
+            项.颜色
           );
-          画黎曼矩形(ctx, 矩形列表, 画布宽, 画布高, 视图范围, 项.颜色);
         }
 
         // 原函数：追踪时只画到进度位置，否则整条画完
@@ -230,8 +248,6 @@ function Canvas2D({ 函数列表 }) {
           }
         }
 
-
-
         // 切线：追踪模式下切点跟着动画走，其次用滑块的值
         if (项.显示切线 || 项.追踪切线) {
           const 切点 = 项.追踪切线
@@ -249,28 +265,56 @@ function Canvas2D({ 函数列表 }) {
         ctx.setLineDash([]);
       }
     });
+  }, [函数列表, 视图范围, 动画进度, 画布尺寸, 像素比]);
 
-    // 十字准星功能，压在所有内容上面
-    if (鼠标位置 && !拖拽中.current) {
-      画十字准星(
-        ctx,
-        鼠标位置.x,
-        鼠标位置.y,
-        画布宽,
-        画布高,
-        视图范围,
-        读数列表
-      );
+  // ———————— 顶层：十字准星 + 悬停读数（便宜，跟鼠标走） ————————
+  useEffect(() => {
+    const 画板 = 顶层Ref.current;
+    if (!画板) return;
+
+    const ctx = 画板.getContext("2d");
+    const 画布宽 = 画布尺寸.宽;
+    const 画布高 = 画布尺寸.高;
+    ctx.setTransform(像素比, 0, 0, 像素比, 0, 0);
+
+    ctx.clearRect(0, 0, 画布宽, 画布高);
+    if (!鼠标位置 || 拖拽中.current) return;
+
+    // 每条函数在光标 x 处的值。解析走了缓存，每条只剩一次代入求值
+    const 读数列表 = [];
+    for (const 项 of 函数列表) {
+      if (!项.表达式) continue;
+      try {
+        const 解析结果 = 解析表达式(项.表达式);
+        if (!解析结果 || !解析结果.成功) continue;
+        读数列表.push({
+          表达式: 项.表达式,
+          颜色: 项.颜色,
+          值: 解析结果.计算函数(鼠标位置.x),
+        });
+      } catch {
+        /* 半截表达式跳过 */
+      }
     }
-  }, [函数列表, 视图范围, 动画进度, 画布尺寸, 鼠标位置]);
 
-  // 把浏览器事件坐标换算成画布内部像素（CSS 尺寸和属性尺寸可能不等）
+    画十字准星(
+      ctx,
+      鼠标位置.x,
+      鼠标位置.y,
+      画布宽,
+      画布高,
+      视图范围,
+      读数列表
+    );
+  }, [鼠标位置, 视图范围, 画布尺寸, 函数列表, 像素比]);
+
+  // 把浏览器事件坐标换算成画布内部逻辑像素（CSS 尺寸）
   function 取画布内像素(事件) {
-    const 画板 = canvasRef.current;
+    const 画板 = 顶层Ref.current;
     const 矩形 = 画板.getBoundingClientRect();
     return {
-      像素x: (事件.clientX - 矩形.left) * (画板.width / 矩形.width),
-      像素y: (事件.clientY - 矩形.top) * (画板.height / 矩形.height),
+      像素x: (事件.clientX - 矩形.left) * (画布尺寸.宽 / 矩形.width),
+      像素y: (事件.clientY - 矩形.top) * (画布尺寸.高 / 矩形.height),
     };
   }
   function 处理按下(事件) {
@@ -279,7 +323,7 @@ function Canvas2D({ 函数列表 }) {
   }
 
   function 处理移动(事件) {
-    const 画板 = canvasRef.current;
+    const 画板 = 顶层Ref.current;
     if (!画板) return;
 
     // 不拖拽时：记录光标位置，供十字准星使用
@@ -288,16 +332,16 @@ function Canvas2D({ 函数列表 }) {
       const 数学 = 像素转数学(
         像素x,
         像素y,
-        画板.width,
-        画板.height,
+        画布尺寸.宽,
+        画布尺寸.高,
         视图范围
       );
       设置鼠标位置({ x: 数学.数学x, y: 数学.数学y });
       return;
     }
 
-    const 画布宽 = 画板.width;
-    const 画布高 = 画板.height;
+    const 画布宽 = 画布尺寸.宽;
+    const 画布高 = 画布尺寸.高;
 
     const 像素偏移x = 事件.clientX - 上次鼠标.current.x;
     const 像素偏移y = 事件.clientY - 上次鼠标.current.y;
@@ -332,40 +376,59 @@ function Canvas2D({ 函数列表 }) {
   }
 
   return (
-    <div ref={容器Ref} style={{ width: "100%" }}>
+    <div ref={容器Ref} className="画布区">
       <div style={{ marginBottom: "0.5rem" }}>
         <button
+          className="按钮"
           onClick={() => 设置视图范围(默认视图范围)}
-          style={{
-            padding: "0.35rem 0.75rem",
-            border: "1px solid #999",
-            borderRadius: "4px",
-            background: "#fff",
-            cursor: "pointer",
-            fontSize: "0.85rem",
-          }}
         >
           ⌂ 回到初始视野
         </button>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={画布尺寸.宽}
-        height={画布尺寸.高}
+      {/* 边框挂在外层 div 上：两层画布内容区才能完全对齐
+          两层都是：内部像素 = CSS 尺寸 × 像素比，CSS 尺寸固定为逻辑尺寸 */}
+            <div
+        className="画布框"
         style={{
-          border: "1px solid #ccc",
-          cursor: 拖拽中.current ? "grabbing" : "crosshair",
-          display: "block",
+          position: "relative",
+          width: 画布尺寸.宽,
+          height: 画布尺寸.高,
         }}
-        onMouseDown={处理按下}
-        onMouseMove={处理移动}
-        onMouseUp={处理松开}
-        onMouseLeave={处理离开}
-      />
+      >
+        <canvas
+          ref={底层Ref}
+          className="底层画布"
+          width={Math.round(画布尺寸.宽 * 像素比)}
+          height={Math.round(画布尺寸.高 * 像素比)}
+          style={{
+            width: `${画布尺寸.宽}px`,
+            height: `${画布尺寸.高}px`,
+            display: "block",
+          }}
+        />
+
+        <canvas
+          ref={顶层Ref}
+          width={Math.round(画布尺寸.宽 * 像素比)}
+          height={Math.round(画布尺寸.高 * 像素比)}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: `${画布尺寸.宽}px`,
+            height: `${画布尺寸.高}px`,
+            cursor: 拖拽中.current ? "grabbing" : "crosshair",
+            display: "block",
+          }}
+          onMouseDown={处理按下}
+          onMouseMove={处理移动}
+          onMouseUp={处理松开}
+          onMouseLeave={处理离开}
+        />
+      </div>
     </div>
   );
 }
 
 export default Canvas2D;
-

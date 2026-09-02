@@ -4,12 +4,16 @@ import { useState } from "react";
 import { 可选颜色 } from "../../utils/colors";
 import { 解析表达式 } from "../../math/parse";
 import { 取导数, 找区间内临界点 } from "../../math/derivative";
-import { 检查表达式 } from "../../math/validate"
+import { 检查表达式 } from "../../math/validate";
+import { useLanguage } from "../../i18n/LanguageContext";
+import NumberInput from "./NumberInput";
+import Tex from "../common/Tex";
 
 // 停在临界点后，需要要拖出这么远才放开（数学单位）
 const 逃逸距离 = 0.35;
 
 function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
+  const { t } = useLanguage();
   const [调色盘展开, 设置调色盘展开] = useState(false);
   //解析式保护，防止崩溃
   // 解析表达式，可能因为半截输入而抛错，包一层防止整个组件崩掉
@@ -24,15 +28,19 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   //错误提示功能
   // 错误提示：先给自制错误检查，无法识别后，再给通用纠错
   const 自查错误 = 检查表达式(项.表达式);
-  const 错误提示 = 自查错误 || (项.表达式 && !可用 ? "这个算式解析不了，检查一下写法" : null);
+  const 错误提示 = 自查错误
+    ? t(自查错误.键, ...(自查错误.参数 || []))
+    : 项.表达式 && !可用
+      ? t("解析不了")
+      : null;
 
   // 切点可能因为清空输入框变成 NaN，兜底成 0
   const 切点 = Number.isFinite(项.切点x) ? 项.切点x : 0;
   const 滑块范围 =
     Number.isFinite(项.滑块范围) && 项.滑块范围 > 0 ? 项.滑块范围 : 5;
 
-    // 符号求导优先：切线斜率和泰勒的一阶系数必须来自同一个来源
-  let 导数信息 = { 求值: () => NaN, 是符号: false, 公式: null };
+  // 符号求导优先：切线斜率和泰勒的一阶系数必须来自同一个来源
+  let 导数信息 = { 求值: () => NaN, 是符号: false, 公式: null, 公式Tex: null };
   let 当前斜率 = NaN;
   if (可用) {
     try {
@@ -42,8 +50,6 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
       当前斜率 = NaN;
     }
   }
-
-
 
   const 是临界点 = Number.isFinite(当前斜率) && Math.abs(当前斜率) < 0.001;
   // 导数关键点粘连停止功能，防止错过关键信息
@@ -69,149 +75,83 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   }
 
   return (
-    <div style={{ marginBottom: "0.75rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+    <div className="函数行">
+      <div className="行顶">
         {/* 颜色块：点一下展开调色盘 */}
         <button
+          className="色钮"
           onClick={() => 设置调色盘展开(!调色盘展开)}
-          title="选择颜色"
-          style={{
-            width: "1.75rem",
-            height: "1.75rem",
-            backgroundColor: 项.颜色,
-            border: "2px solid #fff",
-            boxShadow: "0 0 0 1px #ccc",
-            borderRadius: "50%",
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
+          title={t("选择颜色")}
+          style={{ backgroundColor: 项.颜色 }}
         />
 
         {/* 表达式输入框 */}
         <input
           type="text"
+          className={`输入框 表达式框${错误提示 ? " 错误" : ""}`}
           value={项.表达式}
           onChange={(事件) => 更新函数(项.id, "表达式", 事件.target.value)}
-          placeholder="例如: sin(x)"
-          style={{
-            flex: 1,
-            minWidth: 0,
-            border: 错误提示 ? "1px solid #dc2626" : "1ppx solid #ccc",
-            padding: "0.5rem",
-            fontSize: "1rem",
-            boxSizing: "border-box",
-          }}
+          placeholder={t("例如: sin(x)")}
         />
 
         {/* 删除按钮：只剩一个时不显示，避免全删光 */}
         {可删除 && (
           <button
+            className="删钮"
             onClick={() => 删除函数(项.id)}
-            title="删除这个函数"
-            style={{
-              width: "1.75rem",
-              height: "1.75rem",
-              border: "1px solid #ccc",
-              borderRadius: "4px",
-              background: "#fff",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
+            title={t("删除这个函数")}
           >
             ×
           </button>
         )}
       </div>
+
       {/*错误提示*/}
-      {错误提示 && (
-        <div
-          style={{
-            marginTop: "0.3rem",
-            marginLeft: "2.15rem",
-            fontSize: "0.8rem",
-            color: "#b91c1c",
-          }}
-        >
-          {错误提示}
-        </div>
-      )}
+      {错误提示 && <div className="错提">{错误提示}</div>}
 
       {/* 导数开关 */}
-      <div
-        style={{
-          marginTop: "0.4rem",
-          marginLeft: "2.15rem",
-          fontSize: "0.85rem",
-        }}
-      >
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            cursor: "pointer",
-          }}
-        >
+      <div className="子区">
+        <label className="复选行">
           <input
             type="checkbox"
             checked={项.显示导数}
             onChange={(事件) => 更新函数(项.id, "显示导数", 事件.target.checked)}
           />
-          显示导数 f′(x)（虚线）
+          {t("显示导数")}
         </label>
-                {项.显示导数 && 导数信息.公式 && (
-          <div
-            style={{
-              marginTop: "0.2rem",
-              marginLeft: "1.2rem",
-              fontFamily: "monospace",
-              fontSize: "0.8rem",
-              color: "#555",
-            }}
-          >
-            f′(x) = {导数信息.公式}
+
+        {项.显示导数 && (导数信息.公式Tex || 导数信息.公式) && (
+          <div className="导数式">
+            {导数信息.公式Tex ? (
+              <Tex 源码={`f'(x) = ${导数信息.公式Tex}`} />
+            ) : (
+              <span className="代码">f′(x) = {导数信息.公式}</span>
+            )}
           </div>
         )}
-
       </div>
 
       {/* 切线开关 + 切点控制 */}
-      <div
-        style={{
-          marginTop: "0.4rem",
-          marginLeft: "2.15rem",
-          fontSize: "0.85rem",
-        }}
-      >
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            cursor: "pointer",
-          }}
-        >
+      <div className="子区">
+        <label className="复选行">
           <input
             type="checkbox"
             checked={项.显示切线}
             onChange={(事件) => 更新函数(项.id, "显示切线", 事件.target.checked)}
           />
-          显示切线
+          {t("显示切线")}
         </label>
 
         {项.显示切线 && (
-          <div style={{ marginTop: "0.4rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <span>x =</span>
+          <>
+            <div className="联排">
+              <span className="微标">x =</span>
               {/* 手动输入不吸附，保证能精确定位 */}
-              <input
-                type="number"
+              <NumberInput
                 step="0.01"
-                value={Number(切点.toFixed(3))}
-                onChange={(事件) =>
-                  更新函数(项.id, "切点x", Number(事件.target.value))
-                }
-                style={{ width: "5rem", padding: "0.2rem" }}
+                值={切点}
+                提交={(数) => 更新函数(项.id, "切点x", 数)}
+                style={{ width: "5rem" }}
               />
             </div>
 
@@ -223,124 +163,72 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
               step={滑块范围 / 500}
               value={切点}
               onChange={(事件) => 处理切点变化(Number(事件.target.value))}
-              style={{ width: "100%", marginTop: "0.3rem" }}
+              style={{ width: "100%" }}
             />
 
             {/* 滑块范围可调 */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.3rem",
-                marginTop: "0.2rem",
-                fontSize: "0.8rem",
-                color: "#666",
-              }}
-            >
-              <span>范围 ±</span>
-              <input
-                type="number"
+            <div className="联排 微标">
+              <span>{t("范围 ±")}</span>
+              <NumberInput
                 min="0.1"
                 step="1"
-                value={滑块范围}
-                onChange={(事件) => {
-                  const 新范围 = Number(事件.target.value);
-                  if (新范围 > 0) 更新函数(项.id, "滑块范围", 新范围);
+                值={滑块范围}
+                提交={(数) => {
+                  // 范围必须为正，否则滑块 min/max 反转
+                  if (数 > 0) 更新函数(项.id, "滑块范围", 数);
                 }}
-                style={{ width: "4rem", padding: "0.15rem" }}
+                style={{ width: "4rem" }}
               />
             </div>
 
             {/* 实时导数值 */}
-            <div
-              style={{
-                marginTop: "0.2rem",
-                fontFamily: "monospace",
-                color: 是临界点 ? "#b45309" : "#444",
-                fontWeight: 是临界点 ? "bold" : "normal",
-              }}
-            >
-              {Number.isFinite(当前斜率)
-                ? `f′(${切点.toFixed(2)}) = ${当前斜率.toFixed(3)}`
-                : `f′(${切点.toFixed(2)}) 无定义`}
-              {是临界点 && " ← 临界点"}
+            <div className={`斜率读数${是临界点 ? " 临界" : ""}`}>
+              {Number.isFinite(当前斜率) ? (
+                <Tex
+                  源码={`f'(${切点.toFixed(2)}) = ${当前斜率.toFixed(3)}`}
+                />
+              ) : (
+                `f′(${切点.toFixed(2)}) ${t("无定义")}`
+              )}
+              {是临界点 && t("临界点")}
             </div>
-          </div>
+          </>
         )}
       </div>
 
       {/* 动画追踪 */}
-      <div
-        style={{
-          marginTop: "0.4rem",
-          marginLeft: "2.15rem",
-          fontSize: "0.85rem",
-        }}
-      >
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            cursor: "pointer",
-          }}
-        >
+      <div className="子区">
+        <label className="复选行">
           <input
             type="checkbox"
             checked={项.追踪函数}
             onChange={(事件) => 更新函数(项.id, "追踪函数", 事件.target.checked)}
           />
-          追踪函数（看曲线怎么长出来）
+          {t("追踪函数")}
         </label>
 
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            cursor: "pointer",
-            marginTop: "0.25rem",
-          }}
-        >
+        <label className="复选行">
           <input
             type="checkbox"
             checked={项.追踪切线}
             onChange={(事件) => 更新函数(项.id, "追踪切线", 事件.target.checked)}
           />
-          追踪切线（看斜率怎么变）
+          {t("追踪切线")}
         </label>
       </div>
 
       {/* 调色盘：展开时才渲染 */}
       {调色盘展开 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.4rem",
-            marginTop: "0.5rem",
-            padding: "0.5rem",
-            border: "1px solid #ddd",
-            borderRadius: "6px",
-            background: "#fafafa",
-          }}
-        >
+        <div className="调色盘">
           {可选颜色.map((颜色) => (
             <button
               key={颜色}
+              className={`调色钮${颜色 === 项.颜色 ? " 选中" : ""}`}
               onClick={() => {
                 更新函数(项.id, "颜色", 颜色);
                 设置调色盘展开(false);
               }}
-              style={{
-                width: "1.5rem",
-                height: "1.5rem",
-                backgroundColor: 颜色,
-                border:
-                  颜色 === 项.颜色 ? "2px solid #333" : "2px solid transparent",
-                borderRadius: "50%",
-                cursor: "pointer",
-              }}
+              style={{ backgroundColor: 颜色 }}
             />
           ))}
         </div>

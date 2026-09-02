@@ -5,8 +5,11 @@
 //
 // 导数走 symbolicDerivative 的缓存链：一次算完 f…f⁽¹²⁾，
 // 之后拖 a、拖 n 都只是代入求值，不重新求导。
+//
+// 字母公式 / 数字公式是 LaTeX 源码，交给 <Tex> 组件排版，不再拼纯文本。
 
 import { 求导数链 } from "./symbolicDerivative";
+import { 数字转Tex, 变量Tex, 导数记号Tex } from "./tex";
 
 export const 最高支持阶 = 12;
 
@@ -16,21 +19,9 @@ function 阶乘(n) {
   return 积;
 }
 
-function 格式数(值, 位数 = 4) {
-  if (!Number.isFinite(值)) return "?";
-  if (Math.abs(值 - Math.round(值)) < 1e-10) return String(Math.round(值));
-  return String(Number(值.toPrecision(位数)));
-}
-
-// (x - a) 的写法：a=0 时就是 x，a<0 时是 (x + |a|)
-function 格式变量(a) {
-  if (Math.abs(a) < 1e-12) return "x";
-  return `(x ${a > 0 ? "-" : "+"} ${格式数(Math.abs(a))})`;
-}
-
-// 数字公式：0.8415 + 0.5403(x - 1) - 0.4207(x - 1)^2
+// 数字公式（LaTeX）：0.8415 + 0.5403(x - 1) - 0.4207(x - 1)^{2}
 function 拼数字公式(系数, a) {
-  const 变量 = 格式变量(a);
+  const 变量 = 变量Tex(a);
   let 结果 = "";
 
   for (let k = 0; k < 系数.length; k++) {
@@ -38,8 +29,8 @@ function 拼数字公式(系数, a) {
     if (!Number.isFinite(值) || Math.abs(值) < 1e-12) continue;
 
     const 绝对 = Math.abs(值);
-    const 幂 = k === 0 ? "" : k === 1 ? 变量 : `${变量}^${k}`;
-    const 数字 = 绝对 === 1 && k > 0 ? "" : 格式数(绝对);
+    const 幂 = k === 0 ? "" : k === 1 ? 变量 : `${变量}^{${k}}`;
+    const 数字 = 绝对 === 1 && k > 0 ? "" : 数字转Tex(绝对);
     const 项 = 数字 + 幂;
 
     if (结果 === "") 结果 = (值 < 0 ? "-" : "") + 项;
@@ -49,16 +40,15 @@ function 拼数字公式(系数, a) {
   return 结果 === "" ? "0" : 结果;
 }
 
-// 字母公式：f(a) + f'(a)(x-a) + f''(a)/2!(x-a)^2
+// 字母公式（LaTeX）：f(a) + f'(a)(x - a) + \frac{f''(a)}{2!}(x - a)^{2} + …
 // 这个不看具体数值，只按阶数拼，让学生看见结构
 function 拼字母公式(阶) {
   const 项列表 = [];
   for (let k = 0; k <= 阶; k++) {
-    const 撇 = k === 0 ? "" : k <= 3 ? "'".repeat(k) : `⁽${k}⁾`;
-    const 导 = `f${撇}(a)`;
+    const 导 = 导数记号Tex(k);
     if (k === 0) 项列表.push(导);
-    else if (k === 1) 项列表.push(`${导}(x-a)`);
-    else 项列表.push(`${导}/${k}!(x-a)^${k}`);
+    else if (k === 1) 项列表.push(`${导}(x - a)`);
+    else 项列表.push(`\\frac{${导}}{${k}!}(x - a)^{${k}}`);
   }
   return 项列表.join(" + ");
 }
@@ -69,7 +59,7 @@ function 拼字母公式(阶) {
 //   导数值[],   ← f⁽ᵏ⁾(a) 原值，给系数表用
 //   阶乘表[],
 //   系数[],     ← a_k = f⁽ᵏ⁾(a)/k!
-//   数字公式, 字母公式,
+//   数字公式, 字母公式,   ← LaTeX 源码，用 <Tex> 渲染
 //   求值(x), 求值到阶(x, n),
 //   原因
 // }

@@ -27,21 +27,19 @@ export function 预处理表达式(原文) {
 // （symbolic 求导偶尔产出编译通过但求值报错的式子）
 function 能用吗(编译后) {
   const 试点 = [0.37, -1.29, 2.61];
-  let 有一个有限值 = false;
   for (const x of 试点) {
-    let v;
     try {
-      v = 编译后.evaluate({ x });
+      编译后.evaluate({ x });
     } catch {
       return false; // 求值抛错 → 不可用
     }
-    if (Number.isFinite(v)) 有一个有限值 = true;
   }
-  // 三点全是 NaN 也放行：可能只是定义域不含这几个点（比如 sqrt(x-10)）
-  return 有一个有限值 || true;
+  // 试点全算出 NaN 也放行：可能只是定义域不含这几个点（比如 sqrt(x-10)），
+  // 不能据此判死刑。这里唯一要拦的是「求值直接抛错」。
+  return true;
 }
 
-// 返回 { 可用阶数, 求值: [f, f', ...], 公式: [字符串], 完整, 原因? }
+// 返回 { 可用阶数, 求值: [f, f', ...], 公式: [字符串], 公式Tex: [LaTeX], 完整, 原因? }
 //   可用阶数 = 最高可用的 k（f 本身算第 0 阶）
 //   完整 = 是否一路做到了请求的最高阶
 export function 求导数链(表达式, 最高阶 = 默认最高阶) {
@@ -51,6 +49,7 @@ export function 求导数链(表达式, 最高阶 = 默认最高阶) {
 
   const 求值 = [];
   const 公式 = [];
+  const 公式Tex = [];
   let 原因 = null;
 
   try {
@@ -81,6 +80,15 @@ export function 求导数链(表达式, 最高阶 = 默认最高阶) {
         }
       });
       公式.push(节点.toString());
+      // LaTeX 版公式给界面显示用；个别节点类型没有 toTex 就留 null，
+      // 调用方退回显示纯文本公式
+      let tex = null;
+      try {
+        tex = 节点.toTex();
+      } catch {
+        tex = null;
+      }
+      公式Tex.push(tex);
     }
   } catch (e) {
     const 原 = String((e && e.message) || e);
@@ -93,6 +101,7 @@ export function 求导数链(表达式, 最高阶 = 默认最高阶) {
     可用阶数: 求值.length - 1, // 0 表示只有 f 本身，-1 表示连 f 都没编译成功
     求值,
     公式,
+    公式Tex,
     完整: 求值.length === 阶 + 1,
     原因,
   };
@@ -112,4 +121,10 @@ export function 取导函数(表达式, k) {
 export function 取导数公式(表达式, k) {
   const 链 = 求导数链(表达式, Math.max(k, 1));
   return 链.可用阶数 >= k ? 链.公式[k] : null;
+}
+
+// 第 k 阶导数公式的 LaTeX 版，拿不到返回 null
+export function 取导数公式Tex(表达式, k) {
+  const 链 = 求导数链(表达式, Math.max(k, 1));
+  return 链.可用阶数 >= k ? 链.公式Tex[k] : null;
 }

@@ -8,7 +8,7 @@
 //
 // 数值兜底仍然保留：floor、sign 这类符号法拿不到的函数，
 // 除个别点外仍然可导，画出来有意义。
-import { 取导函数, 取导数公式 } from "./symbolicDerivative";
+import { 取导函数, 取导数公式, 取导数公式Tex } from "./symbolicDerivative";
 
 // 中心差分步长。1e-5 接近双精度下的最优值：
 // 再小被浮点误差淹没，再大截断误差变明显
@@ -23,12 +23,17 @@ export function 求导数值(计算函数, x) {
 }
 
 // 取 k 阶导函数。传了表达式就先试符号，拿不到才退回数值
-// 返回 { 求值, 是符号, 公式 }
+// 返回 { 求值, 是符号, 公式, 公式Tex }
 export function 取导数(表达式, 计算函数, k = 1) {
   if (表达式) {
     const 符号 = 取导函数(表达式, k);
     if (符号) {
-      return { 求值: 符号, 是符号: true, 公式: 取导数公式(表达式, k) };
+      return {
+        求值: 符号,
+        是符号: true,
+        公式: 取导数公式(表达式, k),
+        公式Tex: 取导数公式Tex(表达式, k),
+      };
     }
   }
 
@@ -38,10 +43,11 @@ export function 取导数(表达式, 计算函数, k = 1) {
       求值: (x) => 求导数值(计算函数, x),
       是符号: false,
       公式: null,
+      公式Tex: null,
     };
   }
 
-  return { 求值: () => NaN, 是符号: false, 公式: null };
+  return { 求值: () => NaN, 是符号: false, 公式: null, 公式Tex: null };
 }
 
 // 兼容旧调用：只要一个一阶导函数
