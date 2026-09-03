@@ -3,16 +3,19 @@ import PanelLayout from "../components/layout/PanelLayout";
 import FunctionInput from "../components/controls/FunctionInput";
 import Canvas2D from "../components/canvas2d/Canvas2D";
 import { 可选颜色 } from "../utils/colors";
-import { useLanguage } from "../i18n/LanguageContext";
 import IntegralPanel from "../components/controls/IntegralPanel";
 import IntegralReadout from "../components/controls/IntegralReadout";
 import TaylorPanel from "../components/controls/TaylorPanel";
 import TaylorReadout from "../components/controls/TaylorReadout";
+import DerivativeReadout from "../components/controls/DerivativeReadout";
 
 // 2D 图形页面 - 函数绘图工具
+//
+// 布局：上排 左控制栏 | 画布 | 右功能栏；底部通宽数据带。
+// 数据带里聚着三类读数：导数公式（勾了显示导数）、
+// 黎曼和数据（勾了定积分）、泰勒数据（泰勒面板标题行的开关）。
+// 三类都没有时数据带整条不渲染，画布占满高度。
 function Graph2DPage() {
-  const { t } = useLanguage();
-
   // 函数列表：每个元素是 { id, 表达式, 颜色, 显示导数 }
   const [函数列表, 设置函数列表] = useState([
     {
@@ -41,6 +44,9 @@ function Graph2DPage() {
       对比点x: 1,
     },
   ]);
+
+  // 泰勒数据带的开关：按钮在右侧泰勒面板的标题行
+  const [显示泰勒数据, 设置显示泰勒数据] = useState(false);
 
   const 下一个id = useRef(2);
 
@@ -85,6 +91,13 @@ function Graph2DPage() {
     设置函数列表((旧列表) => 旧列表.filter((项) => 项.id !== id));
   }
 
+  // 三类读数有任何一类要显示，底部数据带才渲染
+  const 有导数数据 = 函数列表.some((项) => 项.显示导数 && 项.表达式);
+  const 有积分数据 = 函数列表.some((项) => 项.显示积分 && 项.表达式);
+  const 有泰勒数据 =
+    显示泰勒数据 && 函数列表.some((项) => 项.显示泰勒 && 项.表达式);
+  const 有底部 = 有导数数据 || 有积分数据 || 有泰勒数据;
+
   return (
     <PanelLayout
       控制区={
@@ -96,13 +109,26 @@ function Graph2DPage() {
         />
       }
       画布区={<Canvas2D 函数列表={函数列表} />}
-      底部区={<IntegralReadout 函数列表={函数列表} />}
-      抽屉标题={t("泰勒展开数据")}
-      抽屉区={<TaylorReadout 函数列表={函数列表} 更新函数={更新函数} />}
+      底部区={
+        有底部 ? (
+          <>
+            <DerivativeReadout 函数列表={函数列表} />
+            <IntegralReadout 函数列表={函数列表} />
+            {有泰勒数据 && (
+              <TaylorReadout 函数列表={函数列表} 更新函数={更新函数} />
+            )}
+          </>
+        ) : null
+      }
       右侧区={
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <IntegralPanel 函数列表={函数列表} 更新函数={更新函数} />
-          <TaylorPanel 函数列表={函数列表} 更新函数={更新函数} />
+          <TaylorPanel
+            函数列表={函数列表}
+            更新函数={更新函数}
+            显示泰勒数据={显示泰勒数据}
+            切换泰勒数据={() => 设置显示泰勒数据((旧) => !旧)}
+          />
         </div>
       }
     />

@@ -1,14 +1,17 @@
 // 画曲线 - 纯渲染，零决策
 //
-// 所有数学判断都在 src/math/sampler/ 里做完了，这里只有两件事：
+// 所有数学判断都在 src/math/sampler/ 里做完了，这里只有三件事：
 //   笔画[] → 折线
 //   包络带[] → 纵向填充
+//   空心圆[]/实心点[] → 断点标记（白心彩边圈 / 同色实心点）
 // 之前所有反复的根源都是渲染层里藏着判断，这层从此没有资格出错。
 import { 数学转像素 } from "../../utils/mathToScreen";
 import { 采样曲线 } from "../../math/sampler";
 
 const 近轴距离 = 3; // 离轴多少像素内算「贴着」
 const 平坦跨度 = 6; // 段跨度小于这个才算「沿着轴走」，排除穿过轴的情况
+const 空心圈半径 = 3.5;
+const 实心点半径 = 2.6;
 
 export function 画曲线(
   ctx,
@@ -44,7 +47,7 @@ export function 画曲线(
   const 终点x = 点数组[点数组.length - 1].x;
   if (!(终点x > 起点x)) return;
 
-  const { 笔画, 包络带 } = 采样曲线(
+  const { 笔画, 包络带, 空心圆 = [], 实心点 = [] } = 采样曲线(
     计算函数,
     起点x,
     终点x,
@@ -83,52 +86,82 @@ export function 画曲线(
     ctx.restore();
   }
 
-  if (!笔画.length) return;
+  if (笔画.length) {
+    // —— 笔画：先算像素坐标 ——
+    const 像素笔画 = 笔画.map((条) =>
+      条.map((p) => ({ px: x转(p.x), py: 夹(y转(p.y)) }))
+    );
 
-  // —— 笔画：先算像素坐标 ——
-  const 像素笔画 = 笔画.map((条) =>
-    条.map((p) => ({ px: x转(p.x), py: 夹(y转(p.y)) }))
-  );
+    // —— 贴轴的段垫白边：曲线和坐标轴挤在同一批像素时能分开 ——
+    // 「跨度小」把「穿过轴」排除掉：sin(x) 过零点时是斜的，跨度大
+    const x轴py = y转(0);
+    const y轴px = x转(0);
+    let 有贴轴 = false;
 
-  // —— 贴轴的段垫白边：曲线和坐标轴挤在同一批像素时能分开 ——
-  // 「跨度小」把「穿过轴」排除掉：sin(x) 过零点时是斜的，跨度大
-  const x轴py = y转(0);
-  const y轴px = x转(0);
-  let 有贴轴 = false;
-
-  ctx.save();
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 6;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  for (const 条 of 像素笔画) {
-    for (let i = 1; i < 条.length; i++) {
-      const a = 条[i - 1];
-      const b = 条[i];
-      const 跨 = Math.abs(b.py - a.py);
-      const 贴x轴 =
-        跨 < 平坦跨度 &&
-        Math.min(Math.abs(a.py - x轴py), Math.abs(b.py - x轴py)) < 近轴距离;
-      const 贴y轴 =
-        跨 >= 平坦跨度 &&
-        Math.min(Math.abs(a.px - y轴px), Math.abs(b.px - y轴px)) < 近轴距离;
-      if (贴x轴 || 贴y轴) {
-        有贴轴 = true;
-        ctx.moveTo(a.px, a.py);
-        ctx.lineTo(b.px, b.py);
+    ctx.save();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (const 条 of 像素笔画) {
+      for (let i = 1; i < 条.length; i++) {
+        const a = 条[i - 1];
+        const b = 条[i];
+        const 跨 = Math.abs(b.py - a.py);
+        const 贴x轴 =
+          跨 < 平坦跨度 &&
+          Math.min(Math.abs(a.py - x轴py), Math.abs(b.py - x轴py)) < 近轴距离;
+        const 贴y轴 =
+          跨 >= 平坦跨度 &&
+          Math.min(Math.abs(a.px - y轴px), Math.abs(b.px - y轴px)) < 近轴距离;
+        if (贴x轴 || 贴y轴) {
+          有贴轴 = true;
+          ctx.moveTo(a.px, a.py);
+          ctx.lineTo(b.px, b.py);
+        }
       }
     }
-  }
-  if (有贴轴) ctx.stroke();
-  ctx.restore();
+    if (有贴轴) ctx.stroke();
+    ctx.restore();
 
-  // —— 正式描线 ——
-  ctx.strokeStyle = 颜色;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (const 条 of 像素笔画) {
-    ctx.moveTo(条[0].px, 条[0].py);
-    for (let i = 1; i < 条.length; i++) ctx.lineTo(条[i].px, 条[i].py);
+    // —— 正式描线 ——
+    ctx.strokeStyle = 颜色;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const 条 of 像素笔画) {
+      ctx.moveTo(条[0].px, 条[0].py);
+      for (let i = 1; i < 条.length; i++) ctx.lineTo(条[i].px, 条[i].py);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
+
+  // —— 断点标记 ——
+  // 空心圈：函数在该点无定义、但极限有限（可去间断 / 跳跃空端 / 收敛边界）
+  // 实心点：跳跃或边界处有定义的那一端（floor 台阶的端点）
+  // 用未夹的原始像素坐标判断：画布外的标记不画
+  if (空心圆.length || 实心点.length) {
+    ctx.save();
+    for (const p of 空心圆) {
+      const px = x转(p.x);
+      const py = y转(p.y);
+      if (px < -5 || px > 画布宽 + 5 || py < -5 || py > 画布高 + 5) continue;
+      ctx.beginPath();
+      ctx.arc(px, py, 空心圈半径, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = 颜色;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+    ctx.fillStyle = 颜色;
+    for (const p of 实心点) {
+      const px = x转(p.x);
+      const py = y转(p.y);
+      if (px < -5 || px > 画布宽 + 5 || py < -5 || py > 画布高 + 5) continue;
+      ctx.beginPath();
+      ctx.arc(px, py, 实心点半径, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 }

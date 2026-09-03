@@ -5,6 +5,13 @@ import { compile } from "mathjs";
 export function 预处理(表达式字符串) {
   let 结果 = 表达式字符串;
 
+  // 数学符号写法 → mathjs 写法（手打的符号；键盘插入的 pi/sqrt 本来就是 ASCII）
+  // π 要先于 √ 处理：√π → √pi → sqrt(pi)，顺序反了 √ 抓不到 pi
+  结果 = 结果.replace(/π/g, "pi");
+  结果 = 结果.replace(/√\s*\(/g, "sqrt("); // √(x+1)
+  结果 = 结果.replace(/√\s*(\d+(?:\.\d+)?|[a-zA-Z]+)/g, "sqrt($1)"); // √2、√x
+  结果 = 结果.replace(/÷/g, "/").replace(/×/g, "*").replace(/−/g, "-");
+
   // ln(...) → LNTEMP(...)  先占位，避免和下面 log 替换冲突
   结果 = 结果.replace(/\bln\(/g, "LNTEMP(");
 
@@ -58,4 +65,28 @@ export function 解析表达式(表达式字符串) {
   if (解析缓存.size >= 缓存上限) 解析缓存.delete(解析缓存.keys().next().value);
   解析缓存.set(表达式字符串, 结果);
   return 结果;
+}
+
+// 解析常量表达式 - 给数字输入框用：允许打 "pi/2"、"π/2"、"sqrt(2)"、"e" 当参数
+//
+// 和 解析表达式 的区别：作用域是空的，式子里出现 x 之类未知数直接判失败
+// （数字框里打 x 没有含义），返回数字或 null。
+const 常量缓存 = new Map();
+
+export function 解析常量表达式(文本) {
+  const 键 = String(文本 ?? "").trim();
+  if (!键) return null;
+  if (常量缓存.has(键)) return 常量缓存.get(键);
+
+  let 值 = null;
+  try {
+    const v = compile(预处理(键)).evaluate({});
+    if (typeof v === "number" && Number.isFinite(v)) 值 = v;
+  } catch {
+    值 = null;
+  }
+
+  if (常量缓存.size >= 缓存上限) 常量缓存.delete(常量缓存.keys().next().value);
+  常量缓存.set(键, 值);
+  return 值;
 }

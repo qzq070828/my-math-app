@@ -1,7 +1,10 @@
 // 画布下方的数据条 - 黎曼和公式、当前值、真实答案、误差
+// 数字优先显示精确式：上下限打过 π 的话，Δx = π/4、答案 = π/2 都是符号式，
+// 旁边用小字留着小数近似做参照；认不出的值照常显示小数。
 import { 解析表达式 } from "../../math/parse";
 import { 求黎曼和, 求参考值, n序列 } from "../../math/integral";
-import { 表达式转Tex, 数字转Tex } from "../../math/tex";
+import { 表达式转Tex, 精确数字Tex } from "../../math/tex";
+import { 提取允许基, 精确Tex } from "../../math/exact";
 import { useLanguage } from "../../i18n/LanguageContext";
 import Tex from "../common/Tex";
 
@@ -17,6 +20,19 @@ function 求和Tex(端点方式) {
   return "\\sum_{i=1}^{n} f(a + i\\,\\Delta x)\\,\\Delta x";
 }
 
+// 求和值/参考值：认得出符号 → 符号式为主 + 小字小数；认不出 → 小数
+function 和或符(v, 基, 无法计算文本) {
+  if (!Number.isFinite(v)) return 无法计算文本;
+  const 精 = 精确Tex(v, 基);
+  if (!精) return v.toFixed(5);
+  return (
+    <>
+      <Tex 源码={精} />
+      <span className="微标"> ≈ {v.toFixed(5)}</span>
+    </>
+  );
+}
+
 function IntegralReadout({ 函数列表 }) {
   const { t } = useLanguage();
   const 开启的 = 函数列表.filter((项) => 项.显示积分 && 项.表达式);
@@ -25,7 +41,6 @@ function IntegralReadout({ 函数列表 }) {
   return (
     <div
       style={{
-        marginTop: "1rem",
         display: "grid",
         gap: "1rem",
       }}
@@ -70,17 +85,20 @@ function IntegralReadout({ 函数列表 }) {
         const 已完成 = !项.积分播放中 && n >= n序列[n序列.length - 1];
         const 式Tex = 表达式转Tex(项.表达式);
 
+        // 精确显示总开关：表达式或上下限原文里出现过 π/e/√ 才允许出符号
+        const 基 = 提取允许基(项.表达式, 项.积分下限原文, 项.积分上限原文);
+
         return (
           <div
             key={项.id}
             className="读数卡"
             style={{ "--卡色": 项.颜色 }}
           >
-            {/* 标题：这是哪条函数的哪个积分（真排版） */}
+            {/* 标题：这是哪条函数的哪个积分（真排版，上下限优先符号式） */}
             <div className="读数卡头">
               <span className="色点" style={{ backgroundColor: 项.颜色 }} />
               <Tex
-                源码={`\\int_{${数字转Tex(a)}}^{${数字转Tex(b)}} ${式Tex ?? "f(x)"} \\, dx`}
+                源码={`\\int_{${精确数字Tex(a, 基)}}^{${精确数字Tex(b, 基)}} ${式Tex ?? "f(x)"} \\, dx`}
               />
               <span className="微标">
                 {t("端点方式说明", t(端点键[项.端点方式] || "右端点"))}
@@ -92,23 +110,21 @@ function IntegralReadout({ 函数列表 }) {
               <Tex 块 源码={求和Tex(项.端点方式)} />
               <Tex
                 块
-                源码={`\\Delta x = \\frac{b - a}{n} = \\frac{${数字转Tex(b)} - (${数字转Tex(a)})}{${n}} = ${数字转Tex(Δx, 5)}`}
+                源码={`\\Delta x = \\frac{b - a}{n} = \\frac{${精确数字Tex(b, 基)} - (${精确数字Tex(a, 基)})}{${n}} = ${精确数字Tex(Δx, 基, 5)}`}
               />
             </div>
 
-            {/* 答案与误差 */}
+            {/* 答案与误差（误差是量级概念，永远小数） */}
             <div className="答案行">
               <div>
-                n = {n} → {t("黎曼和")} ={" "}
-                {Number.isFinite(黎曼和) ? 黎曼和.toFixed(5) : t("无法计算")}
+                n = {n} → {t("黎曼和")} = {和或符(黎曼和, 基, t("无法计算"))}
               </div>
 
               <div
                 className="答案块"
                 style={{ background: 已完成 ? "#dbeafe" : "transparent" }}
               >
-                {t("答案")} ={" "}
-                {Number.isFinite(参考值) ? 参考值.toFixed(5) : t("无法计算")}
+                {t("答案")} = {和或符(参考值, 基, t("无法计算"))}
               </div>
 
               <div

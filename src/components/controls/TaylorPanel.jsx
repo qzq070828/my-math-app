@@ -19,7 +19,7 @@ const 容差选项 = [
   { 值: 1e-5, 标签: "10⁻⁵" },
 ];
 
-function TaylorPanel({ 函数列表, 更新函数 }) {
+function TaylorPanel({ 函数列表, 更新函数, 显示泰勒数据, 切换泰勒数据 }) {
   const { t } = useLanguage();
   // 播放：每 1.2 秒把 n 加一，到顶自动停
   const 计时器 = useRef(null);
@@ -59,7 +59,21 @@ function TaylorPanel({ 函数列表, 更新函数 }) {
 
   return (
     <section className="面板">
-      <div className="静态题">{t("≈ 泰勒展开")}</div>
+      <div
+        className="静态题"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "0.5rem",
+        }}
+      >
+        <span>{t("≈ 泰勒展开")}</span>
+        {/* 泰勒数据的开关挪到这里：数据在画布下方的通宽数据带里展开 */}
+        <button className="按钮" onClick={切换泰勒数据}>
+          {显示泰勒数据 ? t("收起泰勒数据") : t("展开泰勒数据")}
+        </button>
+      </div>
 
       <div className="面板体" style={{ borderTop: "none", paddingTop: 0 }}>
         {函数列表.map((项) => {
@@ -99,13 +113,17 @@ function TaylorPanel({ 函数列表, 更新函数 }) {
                     gap: "0.55rem",
                   }}
                 >
-                  {/* 展开点 a：滑块 + 数字框 */}
+                  {/* 展开点 a：滑块 + 数字框（数字框可以打 pi/2、π/2 这种常量） */}
                   <div>
                     <div className="联排">
                       <span className="微标">{t("展开点 a =")}</span>
                       <NumberInput
                         值={a}
-                        提交={(数) => 更新函数(项.id, "展开点a", 数)}
+                        原文={项.展开点a原文}
+                        提交={(数, 原文) => {
+                          更新函数(项.id, "展开点a", 数);
+                          更新函数(项.id, "展开点a原文", 原文 ?? null);
+                        }}
                         style={{ width: "5rem" }}
                       />
                     </div>

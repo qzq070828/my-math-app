@@ -14,6 +14,7 @@ import { 取导数 } from "../../math/derivative";
 import { 画泰勒 } from "../../drawing/draw2d/drawTaylor";
 import { 取泰勒 } from "../../math/taylor";
 import { 求容差区间 } from "../../math/errorInterval";
+import { 视野重置桥 } from "../../utils/viewReset";
 
 const 动画周期 = 6000;
 
@@ -79,6 +80,15 @@ function Canvas2D({ 函数列表 }) {
     return () => {
       观察器.disconnect();
       window.removeEventListener("resize", 同步像素比);
+    };
+  }, []);
+
+  // 重置视野的入口挂在导航栏上（按钮在「2D 图形」旁边），
+  // 通过桥对象把 设置视图范围 递出去；卸载时摘掉，避免误调已卸载组件
+  useEffect(() => {
+    视野重置桥.重置 = () => 设置视图范围(默认视图范围);
+    return () => {
+      视野重置桥.重置 = null;
     };
   }, []);
 
@@ -199,7 +209,16 @@ function Canvas2D({ 函数列表 }) {
         // 导函数：同色虚线。符号求导优先，拿不到才退回数值
         if (项.显示导数) {
           const 导 = 取导数(项.表达式, 计算函数, 1);
-          const 导数点数组 = 计算曲线点(导.求值, 视图范围, 画布宽 / 2);
+          // 导数只在原函数有定义的地方存在：
+          // 原函数无定义的地方（ln(x+1) 在 x<=-1、1/x 在 0），导数同样不画
+          const 导求值 = (x) => {
+            try {
+              return Number.isFinite(计算函数(x)) ? 导.求值(x) : NaN;
+            } catch {
+              return NaN;
+            }
+          };
+          const 导数点数组 = 计算曲线点(导求值, 视图范围, 画布宽 / 2);
           ctx.setLineDash([6, 4]);
           画曲线(
             ctx,
@@ -208,7 +227,7 @@ function Canvas2D({ 函数列表 }) {
             画布高,
             视图范围,
             项.颜色,
-            导.求值
+            导求值
           );
           ctx.setLineDash([]);
         }
@@ -377,15 +396,6 @@ function Canvas2D({ 函数列表 }) {
 
   return (
     <div ref={容器Ref} className="画布区">
-      <div style={{ marginBottom: "0.5rem" }}>
-        <button
-          className="按钮"
-          onClick={() => 设置视图范围(默认视图范围)}
-        >
-          ⌂ 回到初始视野
-        </button>
-      </div>
-
       {/* 边框挂在外层 div 上：两层画布内容区才能完全对齐
           两层都是：内部像素 = CSS 尺寸 × 像素比，CSS 尺寸固定为逻辑尺寸 */}
             <div

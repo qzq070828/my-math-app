@@ -6,11 +6,14 @@
 // 所有数学内容走 <Tex>：taylor.js 吐的是 LaTeX 源码，
 // 当字符串直接印会看到一堆 \frac{}{}。
 // 样式全部走 ui.css 的类名，只有函数颜色是运行时的值，走 --卡色。
+// 数字优先显示精确式：表达式或参数原文里出现过 π/e/√（含键盘插入的
+// pi、sqrt），-3.1416 就显示成 -π；没输入过就照常显示小数。
 
-import { 解析表达式 } from "../../math/parse";
+import { 解析表达式, 解析常量表达式 } from "../../math/parse";
 import { 取泰勒 } from "../../math/taylor";
 import { 求容差区间 } from "../../math/errorInterval";
-import { 数字转Tex, 变量Tex, 表达式转Tex } from "../../math/tex";
+import { 数字转Tex, 精确数字Tex, 变量Tex, 表达式转Tex } from "../../math/tex";
+import { 提取允许基 } from "../../math/exact";
 import { useLanguage } from "../../i18n/LanguageContext";
 import Tex from "../common/Tex";
 import NumberInput from "./NumberInput";
@@ -42,10 +45,21 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
         const n = Number.isFinite(项.泰勒阶数) ? 项.泰勒阶数 : 1;
         const 对比x = Number.isFinite(项.对比点x) ? 项.对比点x : 1;
 
+        // 精确显示总开关：表达式或参数原文里出现过 π/e/√
+        // （含键盘插入的 pi、sqrt），下游数值才认成符号式
+        const 基 = 提取允许基(项.表达式, 项.展开点a原文, 项.对比点x原文);
+
+        // 展开点框里打过常量（pi/2、π/2）且值没被滑块拖走 → 头部照原文显示
+        const a原文数 = 项.展开点a原文 ? 解析常量表达式(项.展开点a原文) : null;
+        const a原文显示 =
+          a原文数 !== null && Math.abs(a原文数 - a) < 1e-9
+            ? 项.展开点a原文
+            : null;
+
         let 泰勒 = null;
         if (计算函数) {
           try {
-            泰勒 = 取泰勒(项.表达式, 计算函数, a, n);
+            泰勒 = 取泰勒(项.表达式, 计算函数, a, n, 基);
           } catch {
             泰勒 = null;
           }
@@ -88,7 +102,7 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
           }
         }
 
-        const 变量 = 变量Tex(a);
+        const 变量 = 变量Tex(a, 基);
         const 式子Tex = 表达式转Tex(项.表达式);
 
         return (
@@ -97,7 +111,7 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
               <span className="色点" style={{ background: 项.颜色 }} />
               {式子Tex ? <Tex 源码={式子Tex} /> : 项.表达式}
               <span className="参数">
-                {t("展开参数", 格式(a), 泰勒.有效阶)}
+                {t("展开参数", a原文显示 ?? 格式(a), 泰勒.有效阶)}
               </span>
             </div>
 
@@ -128,11 +142,11 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
                     <tr key={k} className={为零 ? "零项" : undefined}>
                       <td className="数">{k}</td>
                       <td className="数">
-                        <Tex 源码={数字转Tex(泰勒.导数值[k])} />
+                        <Tex 源码={精确数字Tex(泰勒.导数值[k], 基)} />
                       </td>
                       <td className="数">{泰勒.阶乘表[k]}</td>
                       <td className="数">
-                        <Tex 源码={数字转Tex(系数值)} />
+                        <Tex 源码={精确数字Tex(系数值, 基)} />
                       </td>
                       <td className="数">
                         {为零 ? (
@@ -140,7 +154,7 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
                         ) : (
                           <Tex
                             源码={
-                              数字转Tex(系数值) +
+                              精确数字Tex(系数值, 基) +
                               (k === 0
                                 ? ""
                                 : k === 1
@@ -173,7 +187,11 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
                 <span>{t("在 x =")}</span>
                 <NumberInput
                   值={对比x}
-                  提交={(数) => 更新函数(项.id, "对比点x", 数)}
+                  原文={项.对比点x原文}
+                  提交={(数, 原文) => {
+                    更新函数(项.id, "对比点x", 数);
+                    更新函数(项.id, "对比点x原文", 原文 ?? null);
+                  }}
                   style={{ width: "5rem", padding: "0.2rem" }}
                 />
                 <span>{t("处比较")}</span>
@@ -182,11 +200,11 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
               <div className="数字格">
                 <div className="数字块">
                   <div className="数字块标">{t("真值 f(x)")}</div>
-                  <Tex 源码={数字转Tex(真值, 6)} />
+                  <Tex 源码={精确数字Tex(真值, 基, 6)} />
                 </div>
                 <div className="数字块">
                   <div className="数字块标">{t("近似", 泰勒.有效阶)}</div>
-                  <Tex 源码={数字转Tex(近似值, 6)} />
+                  <Tex 源码={精确数字Tex(近似值, 基, 6)} />
                 </div>
                 <div
                   className={
@@ -215,7 +233,7 @@ function TaylorReadout({ 函数列表, 更新函数 }) {
                   <>
                     {t("容差区间说明", 项.容差)}{" "}
                     <Tex
-                      源码={`[${数字转Tex(区间.左)},\\ ${数字转Tex(区间.右)}]`}
+                      源码={`[${精确数字Tex(区间.左, 基)},\\ ${精确数字Tex(区间.右, 基)}]`}
                     />
                     {t("宽", 格式(区间.宽度))}
                     {(区间.左到头 || 区间.右到头) && (

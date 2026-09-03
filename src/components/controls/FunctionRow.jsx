@@ -1,11 +1,14 @@
 // 功能概括
 // 单个函数行 - 颜色块 + 表达式输入框 + 删除按钮 + 导数/切线/追踪控制
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { 可选颜色 } from "../../utils/colors";
 import { 解析表达式 } from "../../math/parse";
 import { 取导数, 找区间内临界点 } from "../../math/derivative";
 import { 检查表达式 } from "../../math/validate";
+import { 提取允许基 } from "../../math/exact";
+import { 精确数字Tex } from "../../math/tex";
 import { useLanguage } from "../../i18n/LanguageContext";
+import SymbolKeyboard from "./SymbolKeyboard";
 import NumberInput from "./NumberInput";
 import Tex from "../common/Tex";
 
@@ -15,6 +18,30 @@ const 逃逸距离 = 0.35;
 function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   const { t } = useLanguage();
   const [调色盘展开, 设置调色盘展开] = useState(false);
+  const [键盘展开, 设置键盘展开] = useState(false);
+  const 输入框Ref = useRef(null);
+
+  // 在光标处插入符号，而不是追加到末尾。
+  // 有选中内容就替换掉它 —— 和普通输入框的行为一致。
+  function 插入符号(文本, 光标回退) {
+    const 框 = 输入框Ref.current;
+    if (!框) return;
+
+    const 起 = 框.selectionStart ?? 框.value.length;
+    const 止 = 框.selectionEnd ?? 起;
+    const 新值 = 框.value.slice(0, 起) + 文本 + 框.value.slice(止);
+
+    更新函数(项.id, "表达式", 新值);
+
+    // React 重渲染之后 DOM 里的 value 才是新的，
+    // 这时候设光标才有意义，所以推到下一帧
+    const 新光标 = 起 + 文本.length - 光标回退;
+    requestAnimationFrame(() => {
+      框.focus();
+      框.setSelectionRange(新光标, 新光标);
+    });
+  }
+
   //解析式保护，防止崩溃
   // 解析表达式，可能因为半截输入而抛错，包一层防止整个组件崩掉
   let 解析结果 = null;
@@ -38,6 +65,10 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
   const 切点 = Number.isFinite(项.切点x) ? 项.切点x : 0;
   const 滑块范围 =
     Number.isFinite(项.滑块范围) && 项.滑块范围 > 0 ? 项.滑块范围 : 5;
+
+  // 精确显示的总开关：表达式或切点原文里出现过 π/e/√（含键盘插入的 pi、sqrt），
+  // 斜率读数才把数值认成符号式（π/2、√2/2）
+  const 基 = 提取允许基(项.表达式, 项.切点x原文);
 
   // 符号求导优先：切线斜率和泰勒的一阶系数必须来自同一个来源
   let 导数信息 = { 求值: () => NaN, 是符号: false, 公式: null, 公式Tex: null };
@@ -87,12 +118,23 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
 
         {/* 表达式输入框 */}
         <input
+          ref={输入框Ref}
           type="text"
           className={`输入框 表达式框${错误提示 ? " 错误" : ""}`}
           value={项.表达式}
           onChange={(事件) => 更新函数(项.id, "表达式", 事件.target.value)}
           placeholder={t("例如: sin(x)")}
         />
+
+        {/* 符号键盘开关 */}
+        <button
+          type="button"
+          onClick={() => 设置键盘展开(!键盘展开)}
+          title={t("符号键盘")}
+          className={"符号键盘钮" + (键盘展开 ? " 开" : "")}
+        >
+          <Tex 源码="\sqrt{x}" />
+        </button>
 
         {/* 删除按钮：只剩一个时不显示，避免全删光 */}
         {可删除 && (
@@ -108,8 +150,9 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
 
       {/*错误提示*/}
       {错误提示 && <div className="错提">{错误提示}</div>}
+      {键盘展开 && <SymbolKeyboard 插入={插入符号} />}
 
-      {/* 导数开关 */}
+      {/* 导数开关（公式显示在画布下方的数据带里，侧栏放不下长分式） */}
       <div className="子区">
         <label className="复选行">
           <input
@@ -119,16 +162,6 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
           />
           {t("显示导数")}
         </label>
-
-        {项.显示导数 && (导数信息.公式Tex || 导数信息.公式) && (
-          <div className="导数式">
-            {导数信息.公式Tex ? (
-              <Tex 源码={`f'(x) = ${导数信息.公式Tex}`} />
-            ) : (
-              <span className="代码">f′(x) = {导数信息.公式}</span>
-            )}
-          </div>
-        )}
       </div>
 
       {/* 切线开关 + 切点控制 */}
@@ -146,11 +179,15 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
           <>
             <div className="联排">
               <span className="微标">x =</span>
-              {/* 手动输入不吸附，保证能精确定位 */}
+              {/* 手动输入不吸附，保证能精确定位；支持打 pi/2、π/2 这种常量 */}
               <NumberInput
                 step="0.01"
                 值={切点}
-                提交={(数) => 更新函数(项.id, "切点x", 数)}
+                原文={项.切点x原文}
+                提交={(数, 原文) => {
+                  更新函数(项.id, "切点x", 数);
+                  更新函数(项.id, "切点x原文", 原文 ?? null);
+                }}
                 style={{ width: "5rem" }}
               />
             </div>
@@ -181,11 +218,11 @@ function FunctionRow({ 项, 更新函数, 删除函数, 可删除 }) {
               />
             </div>
 
-            {/* 实时导数值 */}
+            {/* 实时导数值：认得出符号就显示符号式（π/2、√2/2），否则小数 */}
             <div className={`斜率读数${是临界点 ? " 临界" : ""}`}>
               {Number.isFinite(当前斜率) ? (
                 <Tex
-                  源码={`f'(${切点.toFixed(2)}) = ${当前斜率.toFixed(3)}`}
+                  源码={`f'(${精确数字Tex(切点, 基, 3)}) = ${精确数字Tex(当前斜率, 基, 3)}`}
                 />
               ) : (
                 `f′(${切点.toFixed(2)}) ${t("无定义")}`

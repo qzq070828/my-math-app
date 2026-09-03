@@ -3,6 +3,7 @@
 // 所有要进 KaTeX 的字符串都从这里出，不散落在各个组件里手拼。
 import { parse } from "mathjs";
 import { 预处理表达式 } from "./symbolicDerivative";
+import { 精确Tex } from "./exact";
 
 // 用户输入的表达式 → LaTeX（sin(x) → \sin\left(x\right)，x^2 → x^{2}）
 // 预处理必须和求值走同一套，否则屏幕上显示的和算的就不是同一个函数
@@ -27,10 +28,21 @@ export function 数字转Tex(值, 位数 = 4) {
   return `${尾数} \\times 10^{${指数}}`;
 }
 
-// (x - a) 的 LaTeX 写法：a=0 时就是 x，a<0 时是 (x + |a|)
-export function 变量Tex(a) {
+// 数字 → LaTeX 的精确版：值能认成 π/e/√ 的简单倍数（且在允许基内）
+// 就用符号式（π/2、√2/2），认不出退回 数字转Tex。
+// 基 来自 提取允许基：用户输入过什么符号，这里才允许显示什么符号。
+export function 精确数字Tex(值, 基, 位数 = 4) {
+  if (!Number.isFinite(值)) return "?";
+  const 精 = 精确Tex(值, 基);
+  return 精 ?? 数字转Tex(值, 位数);
+}
+
+// (x - a) 的 LaTeX 写法：a=0 时就是 x，a<0 时是 (x + |a|)。
+// a 给出精确式时（a = π/2），括号里同样是符号式：(x - π/2)
+export function 变量Tex(a, 基 = null) {
   if (Math.abs(a) < 1e-12) return "x";
-  return `(x ${a > 0 ? "-" : "+"} ${数字转Tex(Math.abs(a))})`;
+  const 量 = 基 ? 精确数字Tex(Math.abs(a), 基) : 数字转Tex(Math.abs(a));
+  return `(x ${a > 0 ? "-" : "+"} ${量})`;
 }
 
 // f 的第 k 阶导数记号：f(a)、f'(a)、f''(a)、f'''(a)、f^{(4)}(a)

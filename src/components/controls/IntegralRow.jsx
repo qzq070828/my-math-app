@@ -66,17 +66,26 @@ function IntegralRow({ 项, 更新函数 }) {
             gap: "0.5rem",
           }}
         >
+          {/* 上下限可以打 pi、pi/2、sqrt(2) 这种常量 */}
           <div className="联排">
             <span className="微标">a =</span>
             <NumberInput
               值={项.积分下限}
-              提交={(数) => 更新函数(项.id, "积分下限", 数)}
+              原文={项.积分下限原文}
+              提交={(数, 原文) => {
+                更新函数(项.id, "积分下限", 数);
+                更新函数(项.id, "积分下限原文", 原文 ?? null);
+              }}
               style={{ width: "4rem" }}
             />
             <span className="微标">b =</span>
             <NumberInput
               值={项.积分上限}
-              提交={(数) => 更新函数(项.id, "积分上限", 数)}
+              原文={项.积分上限原文}
+              提交={(数, 原文) => {
+                更新函数(项.id, "积分上限", 数);
+                更新函数(项.id, "积分上限原文", 原文 ?? null);
+              }}
               style={{ width: "4rem" }}
             />
           </div>

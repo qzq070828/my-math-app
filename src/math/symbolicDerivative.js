@@ -13,9 +13,14 @@ const 缓存上限 = 24;
 const 缓存 = new Map();
 
 // 必须和 parse.js 的预处理规则一致，否则同一个式子两处含义不同
-// （比如 log 在这里是常用对数，在那边是自然对数）
+// （比如 log 在这里是常用对数，在那边是自然对数；
+//   π、√、÷、× 这些手打符号两处都要认得）
 export function 预处理表达式(原文) {
   let s = String(原文 || "");
+  s = s.replace(/π/g, "pi");
+  s = s.replace(/√\s*\(/g, "sqrt(");
+  s = s.replace(/√\s*(\d+(?:\.\d+)?|[a-zA-Z]+)/g, "sqrt($1)");
+  s = s.replace(/÷/g, "/").replace(/×/g, "*").replace(/−/g, "-");
   s = s.replace(/\bln\s*\(/g, "LNTEMP("); // 先保护 ln，避免连锁替换
   s = s.replace(/\blog\s*\(/g, "log10(");
   s = s.replace(/LNTEMP\(/g, "log(");
